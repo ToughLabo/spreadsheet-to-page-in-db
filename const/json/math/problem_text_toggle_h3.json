@@ -1,0 +1,22 @@
+{
+  "type": "heading_3",
+  "heading_3": {
+    "rich_text": [{
+      "type": "text",
+      "text": {
+        "content": "",
+        "link": null
+      }
+    }
+  ],
+    "color": "default",
+    "is_toggleable": true
+  },
+  "children":[{
+    "type": "paragraph",
+    "paragraph":{
+      "rich_text":"",
+      "color":"default"
+    }
+  }]
+}

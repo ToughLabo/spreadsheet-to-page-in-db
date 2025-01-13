@@ -1,0 +1,15 @@
+{
+  "type": "heading_3",
+  "heading_3": {
+    "rich_text": [{
+      "type": "text",
+      "text": {
+        "content": "ここで絶対に学んでほしいこと",
+        "link": null
+      }
+    }
+  ],
+    "color": "yellow_background",
+    "is_toggleable": false
+  }
+}

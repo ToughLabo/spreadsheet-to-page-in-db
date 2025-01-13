@@ -57,6 +57,10 @@ def append_paragraph_to_toggle(headers, toggle_block_id, text_content):
   else:
     print("失敗:", res.status_code, res.text)
 
+# 例題の処理だけ別個でする
+def make_page_template(problems, check_answer, important_points, reference, practice_problem, practice_answer):
+  pass
+
 
 def main():
   load_dotenv("config/.env")
@@ -73,7 +77,7 @@ def main():
   CONDITION_COLUMN_NUMBER = os.getenv("CONDITION_COLUMN_NUMBER")
   CSV_FILE_NAME = os.getenv("CSV_FILE_NAME")
   
-  df = pd.read_csv(f"const/{CSV_FILE_NAME}", header=0, usecols=[BLOCK_1_COLUMN, BLOCK_2_COLUMN, BLOCK_3_COLUMN, BLOCK_4_COLUMN, BLOCK_5_COLUMN, BLOCK_6_COLUMN])
+  df = pd.read_csv(f"const/csv/math/{CSV_FILE_NAME}", header=0, usecols=[BLOCK_1_COLUMN, BLOCK_2_COLUMN, BLOCK_3_COLUMN, BLOCK_4_COLUMN, BLOCK_5_COLUMN, BLOCK_6_COLUMN])
   df = df.fillna('')
   
   url_for_page_ids = f"https://api.notion.com/v1/databases/{database_id}/query"

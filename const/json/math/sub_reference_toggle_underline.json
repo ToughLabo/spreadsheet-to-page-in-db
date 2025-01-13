@@ -1,0 +1,24 @@
+{
+  "type": "toggle",
+  "toggle": {
+    "rich_text": [{
+      "type": "text",
+      "text": {
+        "content": "この問題に必要な予備知識・関連知識",
+        "link": null
+      },
+      "annotations": {
+        "underline": true,
+        "bold": true
+      }
+    }],
+    "color": "default",
+    "children":[{
+      "type": "paragraph",
+      "paragraph":{
+        "rich_text":"",
+        "color":"default"
+      }
+    }]
+  }
+}
