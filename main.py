@@ -527,6 +527,29 @@ def make_page_template(problems, check_answer, important_points, reference, prac
   
   return result
 
+# Notion データベース内の 全てのページを取得する。
+def fetch_all_pages(headers, url, payload):
+  all_pages = []
+  payload["page_size"] = 100
+  
+  while True:
+    response = requests.post(url, headers=headers, data=json.dumps(payload))
+    if response.status_code != 200:
+      print(f"status_code:{response.status_code}")
+      print(f"error message:{response.text}")
+      exit()
+    response_data = response.json()
+    all_pages.extend(response_data.get("results", []))
+    
+    if not response_data.get("has_more"):
+      break
+    
+    # Update payload with next_cursor
+    payload["start_cursor"] = response_data["next_cursor"]
+  
+  return all_pages
+
+
 def main():
   load_dotenv("config/.env")
 
@@ -561,16 +584,7 @@ def main():
     ]
   }
 
-  res = requests.post(url_for_page_ids, headers=headers, data=json.dumps(payload))
-
-  if res.status_code != 200:
-    print(f"Error: {res.status_code}")
-    print(res.text)
-    exit()
-
-  data = res.json()
-
-  pages =data.get("results", [])
+  pages = fetch_all_pages(url=url_for_page_ids, headers=headers, payload=payload)
 
   # csv の順番 と page_id の順番が一致していることを仮定する。
   for index, page in enumerate(pages):
