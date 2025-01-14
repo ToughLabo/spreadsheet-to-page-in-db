@@ -562,6 +562,8 @@ def main():
   BLOCK_4_COLUMN = os.getenv("BLOCK_4_COLUMN")
   BLOCK_5_COLUMN = os.getenv("BLOCK_5_COLUMN")
   BLOCK_6_COLUMN = os.getenv("BLOCK_6_COLUMN")
+  BLOCK_7_COLUMN = os.getenv("BLOCK_7_COLUMN")
+  BLOCK_8_COLUMN = os.getenv("BLOCK_8_COLUMN")
   CSV_FILE_NAME = os.getenv("CSV_FILE_NAME")
   
   df = pd.read_csv(f"const/csv/math/{CSV_FILE_NAME}", header=0, usecols=[BLOCK_1_COLUMN, BLOCK_2_COLUMN, BLOCK_3_COLUMN, BLOCK_4_COLUMN, BLOCK_5_COLUMN, BLOCK_6_COLUMN])
@@ -609,9 +611,9 @@ def main():
     # ページの中身の作成
     problems=df.at[index, BLOCK_1_COLUMN]; check_answer=df.at[index, BLOCK_2_COLUMN]; important_points=df.at[index, BLOCK_3_COLUMN];
     reference=df.at[index, BLOCK_4_COLUMN]; practice_problem=df.at[index, BLOCK_5_COLUMN]; practice_answer=df.at[index, BLOCK_6_COLUMN];
-    area=page["properties"]["分野"]["select"]["name"]; 
+    area=df.at[index, BLOCK_8_COLUMN]; 
     if(problems):
-      problem_numbers=page["properties"]["チャート例題番号"]["rich_text"][0]
+      problem_numbers=df.at[index, BLOCK_7_COLUMN]
       reference += f" チャート式基礎からの数学{area}　例題{problem_numbers}"
     blocks = make_page_template(problems=problems, check_answer=check_answer, important_points=important_points, reference=reference, practice_problem=practice_problem, practice_answer=practice_answer)
     # ページの追加
