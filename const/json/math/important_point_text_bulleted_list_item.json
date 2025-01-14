@@ -1,0 +1,9 @@
+{
+  "object": "block",
+  "type": "bulleted_list_item",
+  "bulleted_list_item": {
+    "rich_text": [],
+    "color": "default",
+    "children":[]
+  }
+}

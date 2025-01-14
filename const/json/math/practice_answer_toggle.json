@@ -1,4 +1,5 @@
 {
+  "object": "block",
   "type": "toggle",
   "toggle": {
     "rich_text": [{
@@ -12,12 +13,6 @@
       }
     }],
     "color": "default",
-    "children":[{
-      "type": "paragraph",
-      "paragraph":{
-        "rich_text":"",
-        "color":"default"
-      }
-    }]
+    "children":[]
   }
 }

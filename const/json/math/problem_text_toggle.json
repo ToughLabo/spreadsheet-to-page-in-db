@@ -1,9 +1,9 @@
 {
   "object": "block",
-  "type": "heading_3",
-  "heading_3": {
+  "type": "toggle",
+  "toggle": {
     "rich_text": [],
     "color": "default",
-    "is_toggleable": true
+    "children":[]
   }
 }

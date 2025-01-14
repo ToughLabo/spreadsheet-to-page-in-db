@@ -1,7 +1,7 @@
 {
   "object": "block",
-  "type": "numbered_list_item",
-  "numbered_list_item": {
+  "type": "paragraph",
+  "paragraph": {
     "rich_text": [],
     "color": "default"
   }
