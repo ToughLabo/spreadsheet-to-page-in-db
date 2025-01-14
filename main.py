@@ -539,7 +539,6 @@ def main():
   BLOCK_4_COLUMN = os.getenv("BLOCK_4_COLUMN")
   BLOCK_5_COLUMN = os.getenv("BLOCK_5_COLUMN")
   BLOCK_6_COLUMN = os.getenv("BLOCK_6_COLUMN")
-  CONDITION_COLUMN_NUMBER = os.getenv("CONDITION_COLUMN_NUMBER")
   CSV_FILE_NAME = os.getenv("CSV_FILE_NAME")
   
   df = pd.read_csv(f"const/csv/math/{CSV_FILE_NAME}", header=0, usecols=[BLOCK_1_COLUMN, BLOCK_2_COLUMN, BLOCK_3_COLUMN, BLOCK_4_COLUMN, BLOCK_5_COLUMN, BLOCK_6_COLUMN])
@@ -593,7 +592,7 @@ def main():
         print(f"Error: {res.status_code}")
         print(res.text)
         exit()
-    # ページの追加
+    # ページの中身の作成
     problems=df.at[index, BLOCK_1_COLUMN]; check_answer=df.at[index, BLOCK_2_COLUMN]; important_points=df.at[index, BLOCK_3_COLUMN];
     reference=df.at[index, BLOCK_4_COLUMN]; practice_problem=df.at[index, BLOCK_5_COLUMN]; practice_answer=df.at[index, BLOCK_6_COLUMN];
     area=page["properties"]["分野"]["select"]["name"]; 
@@ -601,99 +600,8 @@ def main():
       problem_numbers=page["properties"]["チャート例題番号"]["rich_text"][0]
       reference += f" チャート式基礎からの数学{area}　例題{problem_numbers}"
     blocks = make_page_template(problems=problems, check_answer=check_answer, important_points=important_points, reference=reference, practice_problem=practice_problem, practice_answer=practice_answer)
+    # ページの追加
     append_contents(headers=headers, page_id=page_id, blocks=blocks)
-    exit()
-    # 例題があるケース
-    if df.at[index, CONDITION_COLUMN_NUMBER]:
-      for b in blocks:
-        block_type = b["type"]  # paragraph, heading_1, toggle, ...
-        block_id   = b["id"]
-        # heading_3 なら数学の場合には、 問題文、チェックの解答、ここで絶対に学んでほしいことの３択
-        if block_type == "heading_3" and b["heading_3"]["rich_text"]:
-          is_toggleable = b["heading_3"]["is_toggleable"]
-          text = b["heading_3"]["rich_text"][0]["plain_text"]
-          print(f"block: {b}")
-          print(f"text: {text}")
-          exit()
-          # True なら Toggle heading 3 （問題文）False ならそれ以外
-          if is_toggleable:
-            if text == "問題文":
-              problem_text = df.at[index, BLOCK_1_COLUMN]
-              append_paragraph_to_toggle(headers, block_id, problem_text)
-          # 練習問題の問題文
-          elif text == "・問題文":
-            practice_problem_text = df.at[index, BLOCK_5_COLUMN]
-            append_sibling_paragraph_to_page(headers, page_id, block_id, "paragraph", practice_problem_text)
-          # チェックの解答
-          elif text == "チェックの解答":
-            check_answer_text = df.at[index, BLOCK_2_COLUMN]
-            append_sibling_paragraph_to_page(headers, page_id, block_id, "numbered_list_item", check_answer_text)
-          # ここで絶対に学んでほしいこと
-          elif text == "ここで絶対に学んでほしいこと":
-            learn_text = df.at[index, BLOCK_3_COLUMN]
-            append_sibling_paragraph_to_page(headers, page_id, block_id, "bulleted_list_item", learn_text)
-          # 練習問題の解答
-          elif text == "解答":
-            practice_answer_text = df.at[index, BLOCK_6_COLUMN]
-            append_paragraph_to_toggle(headers, block_id, practice_answer_text)
-        elif block_type == "toggle" and b["heading3"]["rich_text"]:
-          text = b["toggle"]["rich_text"][0]["plain_text"]
-          # 参照のテキストを挿入
-          if text == "この問題そのものに関して":
-            reference_text = df.at[index, BLOCK_4_COLUMN]
-            append_paragraph_to_toggle(headers, block_id, reference_text)
-    
-    # 例題がないケース
-    else:
-      for b in blocks:
-        block_type = b["type"]  
-        block_id   = b["id"]
-        # heading_3 なら数学の場合には、 チェックの解答、ここで絶対に学んでほしいことの２択, Toggle heading_3 でも heading_3 と判定される
-        if block_type == "heading_3" and b["heading_3"]["rich_text"]:
-          text = b["heading_3"]["rich_text"][0]["plain_text"]
-          # チェックの解答
-          if text == "チェックの解答" and index == 1:
-            check_answer_text = df.at[index, BLOCK_2_COLUMN]
-            append_sibling_paragraph_to_page(headers, page_id, block_id, "numbered_list_item", check_answer_text)
-          # ここで絶対に学んでほしいこと
-          elif text == "ここで絶対に学んでほしいこと" and index == 1:
-            learn_text = df.at[index, BLOCK_3_COLUMN]
-            append_sibling_paragraph_to_page(headers, page_id, block_id, "bulleted_list_item", learn_text)
-          # 練習問題の問題文
-          elif text == "・問題文" and index == 1:
-            practice_problem_text = df.at[index, BLOCK_5_COLUMN]
-            append_sibling_paragraph_to_page(headers, page_id, block_id, "paragraph", practice_problem_text)
-          # 練習問題の解答
-          elif text == "解答" and index == 1:
-            practice_answer_text = df.at[index, BLOCK_6_COLUMN]
-            append_paragraph_to_toggle(headers, block_id, practice_answer_text)
-        # タイプが toggle のもの
-        elif block_type == "toggle" and b["toggle"]["rich_text"]:
-          text = b["toggle"]["rich_text"][0]["plain_text"]
-          # 参照のテキストを挿入
-          if text == "この内容そのものに関して":
-            reference_text = df.at[index, BLOCK_4_COLUMN]
-            append_paragraph_to_toggle(headers, block_id, reference_text)
-    exit()
 
 if __name__ == "__main__":
   main()
-  
-  # text = r"""次の多項式の同類項をまとめて整理せよ。また，$(2)$，$(3)$ の多項式において，［］内の文字に着目したとき，その次数と定数項をいえ。
-
-  #   \begin{align*} &(1) \enspace 3x^2 + 2x - 6 - 4x^2 + 3x + 2 \\ &= (3 - 4)x^2 + (2 + 3)x + (-6 + 2) \\ &= -x^2 + 5x - 4\end{align*} 
-
-  #   \begin{align*} &(2) \enspace 2a^2 - ab - b^2 + 4ab + 3a^2 + 2b^2 \\ &= (2 + 3)a^2 + (-1 + 4)ab + (-1 + 2)b^2 \\ &= 5a^2 + 3ab + b^2\end{align*} 
-  #   ［$b$］に着目すると，次数は $2$，定数項は $5a^2$
-
-  #   \begin{align*} &(3) \enspace x^3 - 2x^3y + 4xy - 3by + y^3 + 2xy - 2by + 4a \\ &= x^3 - 2x^3y + (4 + 2)xy + (-3 - 2)by + y^3 + 4a \\ &= x^3 - 2x^3y + 6xy - 5by + y^3 + 4a \end{align*} 
-  #   ［$x$ と $y$］に着目すると，次数は $4$，定数項は $4a$"""
-  # parsed_text = separate_equation(text,is_debag=True)
-  # parsed_blocks = create_parsed_blocks(text, is_debag=True)
-  # print(parsed_blocks)
-  # separated_problems = separate_problems(text)
-  # for p in separated_problems:
-  #   title = create_parsed_blocks(p["title"])
-  #   problem = create_parsed_blocks(p["problem"], is_debag = True)
-  #   print(f"title:{title}")
-  #   print(f"problem: {problem}")
