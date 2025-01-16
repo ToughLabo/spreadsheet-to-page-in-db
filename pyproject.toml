@@ -11,6 +11,8 @@ requests = "^2.32.3"
 python-dotenv = "^1.0.1"
 pandas = "^2.2.3"
 rich = "^13.9.4"
+setuptools = "^75.8.0"
+main = {path = "spreadsheet_to_page_in_db"}
 
 
 [build-system]
