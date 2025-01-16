@@ -5,6 +5,7 @@ import json
 import pandas as pd
 import re
 from copy import deepcopy
+from rich.progress import track
 
 def append_sibling_paragraph_to_page(headers, page_id, block_id, type, new_content):
   url = f"https://api.notion.com/v1/blocks/{page_id}/children"
@@ -68,6 +69,19 @@ def append_contents(headers, page_id, blocks):
   if res.status_code != 200:
     print(f"Error: {res.status_code}")
     print(res.text)
+    payload_for_status = {
+      "properties":{
+        "Status": "エラー"
+      }
+    }
+    requests.patch(f"https://api.notion.com/v1/pages/{page_id}", headers=headers, data=json.dumps(payload_for_status))
+  else:
+    payload_for_status = {
+      "properties":{
+        "Status": "プログラム編集済"
+      }
+    }
+    requests.patch(f"https://api.notion.com/v1/pages/{page_id}", headers=headers, data=json.dumps(payload_for_status))
   return res.json()
 
 # 太字や数式などが処理されたブロックの集まりを作る関数
@@ -566,7 +580,7 @@ def main():
   BLOCK_8_COLUMN = os.getenv("BLOCK_8_COLUMN")
   CSV_FILE_NAME = os.getenv("CSV_FILE_NAME")
   
-  df = pd.read_csv(f"const/csv/math/{CSV_FILE_NAME}", header=0, usecols=[BLOCK_1_COLUMN, BLOCK_2_COLUMN, BLOCK_3_COLUMN, BLOCK_4_COLUMN, BLOCK_5_COLUMN, BLOCK_6_COLUMN])
+  df = pd.read_csv(f"const/csv/math/{CSV_FILE_NAME}", header=0, usecols=[BLOCK_1_COLUMN, BLOCK_2_COLUMN, BLOCK_3_COLUMN, BLOCK_4_COLUMN, BLOCK_5_COLUMN, BLOCK_6_COLUMN, BLOCK_7_COLUMN, BLOCK_8_COLUMN])
   df = df.fillna('')
   url_for_page_ids = f"https://api.notion.com/v1/databases/{database_id}/query"
 
@@ -589,7 +603,7 @@ def main():
   pages = fetch_all_pages(url=url_for_page_ids, headers=headers, payload=payload)
 
   # csv の順番 と page_id の順番が一致していることを仮定する。
-  for index, page in enumerate(pages):
+  for index, page in track(enumerate(pages),description="creating pages"):
     page_id = page["id"]
     url_for_block_ids = f"https://api.notion.com/v1/blocks/{page_id}/children"
     res = requests.get(url_for_block_ids, headers=headers)
