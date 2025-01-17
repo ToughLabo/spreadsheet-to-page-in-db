@@ -1,14 +1,16 @@
-import re
 from markdown_it import MarkdownIt
-# from markdown_it.rules_inline impo
 from mdit_py_plugins.dollarmath import dollarmath_plugin
 from mdit_py_plugins.amsmath import amsmath_plugin
-from pprint import pprint
+import re
+from typing import Any
 
 # TODO:下線判定を後から実装する。
 # 数式ブロックは inline には想定していない
 # inline text から rich text へ
-def inline_text_to_rich_text(inline_text: str):
+def inline_text_to_rich_text(inline_text: str) -> list[dict[str,Any]]:
+  # 空の場合を先に処理
+  if not inline_text :
+    return []
   # parser の初期化
   md = MarkdownIt("gfm-like").use(dollarmath_plugin, allow_space=True, double_inline=True)
   tokens = md.parse(inline_text)
@@ -104,625 +106,331 @@ def inline_text_to_rich_text(inline_text: str):
 
   return rich_text_array
 
-# TODO:箇条書きに関してもう少し考える
-# ブロック単位の分割
-def parse_markdown_to_blocks(text: str):
-  """
-  markdown-it-py + amsmath_plugin + dollarmath_plugin を使用して
-  Markdown をブロック単位でパースするサンプルコード。
-  
-  以下のブロックに対応：
-    - Heading (#, ##, ### など)
-    - Paragraph
-    - Bullet List / Ordered List
-    - Blockquote (引用)
-    - Callout (簡易的実装：blockquote 内の先頭行が [!xxxx] の場合を想定)
-    - Divider (hr)
-    - Image
-    - Table
-    - 数式 (amsmath/dollarmath):
-        * ブロック数式（$$ ... $$ や \begin{aligned} ... \end{aligned} など）
-        * インライン数式（$ ... $）
-
-  ※ 実際の Markdown 記法やプラグインでのパース結果によっては、
-    全てのケースを完璧に網羅しない可能性があります。
-  """
-
-  md = (
-    MarkdownIt("gfm-like")
-    .use(amsmath_plugin)    # \\begin{aligned} ... \\end{aligned} 等
-    .use(dollarmath_plugin, allow_space=True, double_inline=True) # $...$, $$...$$ の数式
-  )
-
-  tokens = md.parse(text)
-  blocks = []
-  i = 0
-
-  while i < len(tokens):
-    t = tokens[i]
-
-    #---------------------------
-    # 1) Heading (#, ##, ### ...)
-    #---------------------------
-    if t.type == "heading_open":
-      level = int(t.tag[-1])  # 'h1' -> 1, 'h2'->2, ...
-      heading_text = ""
-      j = i + 1
-      while j < len(tokens):
-        if tokens[j].type == "inline":
-          heading_text = tokens[j].content
-        if tokens[j].type == "heading_close":
-          break
-        j += 1
-      blocks.append({
+# ----------------------
+# Block の parse. 入力 index は必ずそのブロックの先頭。出力 index は必ずそのブロックの最後尾 + 1 (次のブロックの先頭)
+# ----------------------
+# heading block を parse
+def parse_heading(tokens, index) -> dict[str,Any]:
+  level = int(tokens[index].tag[-1])
+  heading_text = ""
+  index += 1
+  while index < len(tokens):
+    if tokens[index].type == "inline":
+      heading_text = tokens[index].content
+    else:
+      break
+    index += 1
+  block = {
         "type": f"heading_{level}",
         f"heading_{level}": {
           "rich_text": inline_text_to_rich_text(heading_text)
         },
         "color": "default",
         "is_toggleable": False
-      })
-      i = j + 1
-      continue
+      }
+  index += 1
+  return block, index
 
-    #---------------------------
-    # 2) Horizontal rule (Divider)
-    #---------------------------
-    if t.type == "hr":
-      blocks.append({
-        "type": "divider",
-        "divider": {}
-      })
-      i += 1
-      continue
+# divider block を parse
+def parse_divider(tokens, index) -> dict[str,Any]:
+  block = {
+    "type": "divider",
+    "divider": {}
+  }
+  index += 1
+  return block, index
 
-    #---------------------------
-    # 3) Blockquote (引用, Callout)
-    #---------------------------
-    if t.type == "blockquote_open":
-      # blockquote_close が来るまでを一つの塊とする
-      content_lines = []
-      j = i + 1
-      while j < len(tokens) and tokens[j].type != "blockquote_close":
-        if tokens[j].type == "paragraph_open":
-          # 段落全体を拾う
-          p_text = ""
-          k = j + 1
-          while k < len(tokens) and tokens[k].type != "paragraph_close":
-            if tokens[k].type == "inline":
-              p_text += tokens[k].content + "\n"
-            k += 1
-          content_lines.append(p_text.strip())
-          j = k
-        j += 1
-      blockquote_text = "\n".join(x for x in content_lines if x).strip()
-
-      # TODO:emojiに関する処理を改善する。
-      # 今は[!★]のような形式を前提としている。
-      # Callout かどうかを簡易判定：[!X] で始まれば callout とみなす
-      first_line = blockquote_text.split("\n", 1)[0]
-      if first_line.startswith("[!"):
-        # Callout
-        blocks.append({
-          "type": "callout",
-          "callout":{
-            "rich_text": inline_text_to_rich_text(blockquote_text[4:])
-          },
-          "icon": {
-            "emoji": blockquote_text[2]
-          },
-          "color": "default"
-        })
-      else:
-        # 通常の blockquote
-        blocks.append({
-          "type": "quote",
-          "quote": {
-            "rich_text": inline_text_to_rich_text(blockquote_text)
-          },
-          "color": "default"
-        })
-
-      i = j + 1
-      continue
-
-    #---------------------------
-    # 4) Bullet / Ordered List
-    #---------------------------
-    #   list_item_open の直前に "bullet_list_open" or "ordered_list_open" がある
-    #   list_item には 1 paragraph のみ入ることを仮定
-    #---------------------------
-    def recursive_list_child(tokens, index, type=None):
-      children = []
-      child_type = tokens[index].type
+# TODO: emojiに関する処理を改善する。
+# quote or callout block を parse
+def parse_blockquote(tokens, index) -> dict[str,Any]:
+  p_text = ""
+  children = []
+  index += 1
+  # 先に この quote block の rich_text を取得
+  if tokens[index].type == "paragraph_open":
+    index += 1
+    while index < len(tokens) and tokens[index].type != "paragraph_close":
+      if tokens[index].type == "inline":
+        p_text += tokens[index].content + "\n"
       index += 1
-      if child_type == "paragraph_open":
-        paragraph_text = inline_text_to_rich_text(tokens[index])
-        index += 2
-        return {"type": "paragraph", "paragraph": {"rich_text": paragraph_text}}, index
-      elif child_type == ("math_block" or "amsmath") :
-        expression = tokens[index]
-        index += 2
-        return {"type": "equation", "equation": {"expression": expression}}, index
-      elif child_type == "table_open":
-        # table_close までを一つのテーブルとみなす
-        header = []
-        rows = []
-        j = i + 1
-        row_data = []
-        has_column_header = False
-        table_width = 1
-        table_rows = []
-        cells = []
-        while j < len(tokens) and tokens[j].type != "table_close":
-          if tokens[j].type == "tr_open":
-            row_data = []
-            j += 1
-          elif tokens[j].type == "td_open":
-            # 次の inline を探す
-            cell_text = ""
-            k = j + 1
-            while k < len(tokens) and tokens[k].type != "td_close":
-              if tokens[k].type == "inline":
-                cell_text += tokens[k].content
-              k += 1
-            row_data.append(cell_text.strip())
-            j = k + 1
-          elif tokens[j].type == "tr_close":
-            rows.append(row_data)
-            j += 1
-          elif tokens[j].type == "thead_open":
-            # ヘッダー行の処理
-            while tokens[j].type != "thead_close":
-              if tokens[j].type == "th_open":
-                cell_text = ""
-                k = j + 1
-                while k < len(tokens) and tokens[k].type != "th_close":
-                  if tokens[k].type == "inline":
-                    cell_text += tokens[k].content
-                  k += 1
-                header.append(cell_text.strip())
-                j = k
-              j += 1
-          else:
-            j += 1
-        # ヘッダーの設定
-        if header:
-          has_column_header = True
-          table_width = len(header)
-        else:
-          table_width = len(row_data[0])
-        # 各行の処理
-        if has_column_header:
-          for cell in header:
-            cells.append({
-              "type": "text",
-              "text": {
-                "content": cell,
-                "link": None
-              },
-              "plain_text": cell,
-              "href": None
-            })
-          table_rows.append({
-          "type": "table_row",
-          "table_row": {
-            "cells": cells
-          }
-        })
-        cells = []
-        for row in rows:
-          for cell in row:
-            cells.append({
-              "type": "text",
-              "text": {
-                "content": cell,
-                "link": None
-              },
-              "plain_text": cell,
-              "href": None
-            })
-          table_rows.append({
-            "type": "table_row",
-            "table_row": {
-              "cells": cells
-            }
-          })
-          cells = []
-        
-        index = j + 1
-        result = {
-          "type": "table",
-          "table": {
-            "table_width": table_width,
-            "has_column_header": has_column_header,
-            "has_row_header": False,
-            "children": table_rows
-          }
-        }
-        return result, index
-      elif child_type == "blockquote_open":
-        # blockquote_close が来るまでを一つの塊とする
-        content_lines = []
-        j = i + 1
-        while j < len(tokens) and tokens[j].type != "blockquote_close":
-          if tokens[j].type == "paragraph_open":
-            # 段落全体を拾う
-            p_text = ""
-            k = j + 1
-            while k < len(tokens) and tokens[k].type != "paragraph_close":
-              if tokens[k].type == "inline":
-                p_text += tokens[k].content + "\n"
-              k += 1
-            content_lines.append(p_text.strip())
-            j = k
-          j += 1
-        blockquote_text = "\n".join(x for x in content_lines if x).strip()
-        # TODO:emojiに関する処理を改善する。
-        # 今は[!★]のような形式を前提としている。
-        # Callout かどうかを簡易判定：[!X] で始まれば callout とみなす
-        first_line = blockquote_text.split("\n", 1)[0]
-        if first_line.startswith("[!"):
-          # Callout
-          result = ({
-            "type": "callout",
-            "callout":{
-              "rich_text": inline_text_to_rich_text(blockquote_text[4:])
-            },
-            "icon": {
-              "emoji": blockquote_text[2]
-            },
-            "color": "default"
-          })
-          index = j + 1
-          return result, index
-        else:
-          # 通常の blockquote
-          result = ({
-            "type": "quote",
-            "quote": {
-              "rich_text": inline_text_to_rich_text(blockquote_text)
-            },
-            "color": "default"
-          })
-          index = j + 1
-          return result, index
-      elif child_type == "list_item_open":
-        index += 1
-        rich_text = inline_text_to_rich_text(tokens[index])
-        index += 2
-        if tokens[index].type == ("bullet_list_open"):
-          index += 1
-          children, index = recursive_list_child(tokens, index, "bulleted_list_item")
-        elif tokens[index].type == ("ordered_list_open"):
-          index += 1
-          children, index = recursive_list_child(tokens, index, "numbered_list_item")
-        index += 1
-        return {"type": type, type: {"rich_text": rich_text, "color":"default", "children": children}}, index
-      else:
-        print("error: Your Block Type is not supported in list item")
-        raise(ValueError)
-      
-      
-    if t.type in ("bullet_list_open", "ordered_list_open"):
-      list_type = "bulleted_list_item" if t.type == "bullet_list_open" else "ordered_list_item"
-      j = i + 1
-      while tokens[j].type not in ("bullet_list_close", "ordered_list_close"):
-        children = []
-        if tokens[j+1].type == "list_item_close":
-          k = j - 1
-          rich_text = []
-        else:
-          k = j + 2
-          rich_text = inline_text_to_rich_text(tokens[k])
-        k += 2 
-        # index は list_item_close の位置で帰ってくる
-        if tokens[k].type == "bullet_list_open":
-          children, k = recursive_list_child(tokens, k + 1, "bulleted_list_item")
-        elif token[k].type == "ordered_list_open":
-          children, k = recursive_list_child(tokens, k + 1, "numbered_list_item")
-        blocks.append({"type":list_type, "rich_text": rich_text, "color": "default", "children": children})
-        j = k + 1
-      continue
+    index += 1
+  while index < len(tokens) and tokens[index].type != "blockquote_close":
+    block, index = parse_any_one_block(tokens, index)
+    if block:
+      children.append(block)
 
-    #---------------------------
-    # 5) Table 列ヘッダーのみに対応。行ヘッダーがは未実装
-    #---------------------------
-    if t.type == "table_open":
-      # table_close までを一つのテーブルとみなす
-      header = []
-      rows = []
-      j = i + 1
-      row_data = []
-      has_column_header = False
-      table_width = 1
-      table_rows = []
-      cells = []
-      while j < len(tokens) and tokens[j].type != "table_close":
-        print(f"tokens[j]:{tokens[j]}")
-        if tokens[j].type == "tr_open":
-          row_data = []
-          j += 1
-        elif tokens[j].type == "td_open":
-          # 次の inline を探す
-          cell_text = ""
-          k = j + 1
-          while k < len(tokens) and tokens[k].type != "td_close":
-            if tokens[k].type == "inline":
-              cell_text += tokens[k].content
-            k += 1
-          row_data.append(cell_text.strip())
-          j = k + 1
-        elif tokens[j].type == "tr_close":
-          rows.append(row_data)
-          j += 1
-        elif tokens[j].type == "thead_open":
-          # ヘッダー行の処理
-          while tokens[j].type != "thead_close":
-            if tokens[j].type == "th_open":
-              cell_text = ""
-              k = j + 1
-              while k < len(tokens) and tokens[k].type != "th_close":
-                if tokens[k].type == "inline":
-                  cell_text += tokens[k].content
-                k += 1
-              header.append(cell_text.strip())
-              j = k
-            j += 1
-        else:
-          j += 1
-      # ヘッダーの設定
-      if header:
-        has_column_header = True
-        table_width = len(header)
-      else:
-        table_width = len(row_data[0])
-      # 各行の処理
-      if has_column_header:
-        for cell in header:
-          cells.append({
-            "type": "text",
-            "text": {
-              "content": cell,
-              "link": None
-            },
-            "plain_text": cell,
-            "href": None
-          })
-        table_rows.append({
-        "type": "table_row",
-        "table_row": {
-          "cells": cells
-        }
-      })
-      cells = []
-      for row in rows:
-        for cell in row:
-          cells.append({
-            "type": "text",
-            "text": {
-              "content": cell,
-              "link": None
-            },
-            "plain_text": cell,
-            "href": None
-          })
-        table_rows.append({
-          "type": "table_row",
-          "table_row": {
-            "cells": cells
-          }
-        })
-        cells = []
-      blocks.append({
-        "type": "table",
-        "table": {
-          "table_width": table_width,
-          "has_column_header": has_column_header,
-          "has_row_header": False,
-          "children": table_rows
-        }
-      })
-      i = j + 1
-      continue
+  # TODO:emojiに関する処理を改善する。
+  # 今は[!★]のような形式を前提としている。
+  # Callout かどうかを簡易判定：[!X] で始まれば callout とみなす
+  callout_pattern = r"^\[\!(.*?)\]\s*(.*)"
+  if p_text.startswith("[!"):
+    # Callout
+    match = re.search(callout_pattern, p_text)
+    block = {
+      "type": "callout",
+      "callout":{
+        "rich_text": inline_text_to_rich_text(match.group(2))
+      },
+      "icon": {
+        "emoji": match.group(1)
+      },
+      "color": "default",
+      "children": children
+    }
+  else:
+    # Quote
+    block = {
+      "type": "quote",
+      "quote": {
+        "rich_text": inline_text_to_rich_text(p_text)
+      },
+      "color": "default",
+      "children": children
+    }
+  index += 1
+  return block, index
 
-    #---------------------------
-    # 6) Image TODO: ここはまだ Unavaliable
-    #---------------------------
-    #   inline の子トークンに "image" が出るケースもあるが、
-    #   ブロック的にはパラグラフ扱いになる場合も。
-    #   ここでは単独で <img> 相当の token を見つけた場合を想定
-    #---------------------------
-    # if t.type == "inline":
-    #   # inline.children の中に image token があるかどうか
-    #   if t.children:
-    #     # 複数の child の中に image があるかチェック
-    #     for child in t.children:
-    #       if child.type == "image":
-    #         blocks.append({
-    #           "type": "image",
-    #           "src": child.attrs.get("src", ""),
-    #           "alt": child.content,
-    #           "title": child.attrs.get("title", "")
-    #         })
-    #   # 他の inline は paragraph で処理する可能性があるのでスルー
-    #   i += 1
-    #   continue
+# list_item を parse 
+def parse_list_item(tokens, index, type) -> dict[str,Any]:
+  list_text = ""
+  children = []
+  index += 1
+  # 先に このリストの rich text を取得
+  if tokens[index].type == "paragraph_open":
+    index += 1
+    while index < len(tokens) and tokens[index].type != "paragraph_close":
+      if tokens[index].type == "inline":
+        list_text += tokens[index].content + "\n"
+      index += 1
+    index += 1
+  # 再帰的に children を取得
+  while index < len(tokens) and tokens[index].type != "list_item_close":
+    block, index = parse_any_one_block(tokens, index)
+    if block:
+      children.append(block)
 
-    #---------------------------
-    # 7) 数式（amsmath / dollarmath）
-    #---------------------------
-    #   これらのプラグインでは、
-    #   - "math_block" (ブロック数式)
-    #   - "math_inline" (インライン数式)
-    #   といった token.type が挿入される
-    #---------------------------
-    if t.type == "math_block" or t.type == "amsmath":
-      blocks.append({
-        "type": "equation",
-        "equation": {
-          "expression": t.content.strip()
-        }
-      })
-      i += 1
-      continue
+  # block を作成 
+  block = {
+    "type": type,
+    type :{
+      "rich_text": inline_text_to_rich_text()
+    },
+    "color": "default",
+    "children": children
+  }
+  index += 1
+  return block, index
 
-    #---------------------------
-    # 8) Paragraph (その他テキスト)
-    #---------------------------
-    if t.type == "paragraph_open":
-      paragraph_text = ""
-      j = i + 1
-      while j < len(tokens) and tokens[j].type != "paragraph_close":
-        if tokens[j].type == "inline":
-          paragraph_text += tokens[j].content + "\n"
-        j += 1
-      blocks.append({
-        "type": "paragraph",
-        "paragraph": {
-          "rich_text": inline_text_to_rich_text(paragraph_text.strip())
-        },
-        "color": "default" 
-      })
-      i = j + 1
-      continue
-
-    # 何でもなければ次へ
-    i += 1
-
-  return blocks
-
-
-if __name__ == "__main__":
-  sample = r"""
-# 見出し
-
-これは段落です。  
-- 箇条書きアイテム1
-  - 箇条書きアイテム 1-1
-  - 箇条書きアイテム 1-2
-- 箇条書きアイテム2
-
-> [!★] これは callout の例
-
-
-テーブル例：
-
-| A列 | B列 |
-|-----|-----|
-| 1   | 2   |
-| 3   | 4   |
-
-
-
-___
-
-
-画像とインライン数式：
-https://example.com/image.png
-$E=mc^2$
-
-ブロック数式：
-
-$$
-\begin{aligned}
-  x^2 + 1 &= 0 \\
-  y &= \frac{1}{2}
-\end{aligned}
-$$
-"""
-
-  # blocks_parsed = parse_markdown_to_blocks(sample)
-  # for b in blocks_parsed:
-  #   print(b)
-
-
-  md = MarkdownIt("gfm-like").use(dollarmath_plugin, allow_space=True, double_inline=True).use(amsmath_plugin)
-  text = r"""
-  ## $1$：次の分数関数の定義域と値域を求めなさい。
-
-  $$
-  \begin{align*} &(1) \enspace y = \frac{2}{x-1} + 3 \\ &(2) \enspace y = \frac{-1}{x+2} - 1 \\ &(3) \enspace y = \frac{3}{x} + 2 \end{align*} 
-  $$
-
-  $2$：次の問いに答えなさい。
-
-  \begin{align*} &(1) \enspace 分数関数 $y = \frac{1}{x}$ のグラフを描きなさい。（漸近線も書き込むこと） \\ &(2) \enspace (1)のグラフをもとに、分数関数 $y = \frac{1}{x-2} + 1$ のグラフを描きなさい。（漸近線も書き込むこと） \\ &(3) \enspace (2)のグラフから、この関数の定義域と値域を求めなさい。 \end{align*}
-
-  $3$：次の分数関数のグラフの漸近線を求めなさい。
-
-  \begin{align*} &(1) \enspace y = \frac{4}{x-3} + 5 \\ &(2) \enspace y = \frac{-2}{x+1} - 2 \\ &(3) \enspace y = \frac{1}{x} - 3 \end{align*} 
-
-  $4$：分数関数 $y = \frac{k}{x-p} + q$ のグラフは、関数 $y = \frac{k}{x}$ のグラフをどのように平行移動したものか答えなさい。
-
-  （注：平行移動とは、グラフの形を変えずに、グラフ全体をある方向にずらすことです。）
-
-  *   **定義域と値域は関数の基本！グラフをイメージして考えよう！**
-      *   分数関数 $y = \frac{k}{x-p} + q$  の定義域は、「**分母が $0$ にならない**」という条件から求められる。
-          *   **分母**：$x-p$
-          *   $x-p$ が $0$ になると、計算できなくなっちゃう（**数学では$0$で割ることはできない**）。
-          *   だから、$x-p \neq 0$、つまり、$x \neq p$ が定義域になる。
-      *   値域は、与えられた関数を$x$について解くことで求められる。
-          *   $x =$ の形に変形する。
-          *   その際、分母に$y$の式が出てくるので、その分母が$0$にならない条件から、$y \neq q$ が値域になる。
-      *   **定義域**：関数のグラフを書くときに、$x$ に入れて良い値の範囲のこと。
-      *  **値域**：関数のグラフを書いたときに、$y$ がとる値の範囲のこと。
-      *   分数関数の定義域と値域は、グラフの**漸近線**（だんだん近づいていくけど、決して交わらない線のこと）と関係がある。
-          *   **漸近線**は、$x = p$ と $y = q$ の２つ。
-          *   定義域と値域を考える上で、**漸近線が重要なヒント**になることを覚えておこう！
-          
-  1. 分数方程式を解く際に、分母が $0$ になる場合は解として認められないことに注意する。この問題では、$x=2$ が解にならないことを常に確認する必要がある。
-      1. 箇条書き１
-        箇条書き２
-  2. 与えられた方程式 $\frac{x-5}{x-2} = 3x+k$ は、変形すると $(x-5) = (3x+k)(x-2)$ となる。ただし、$x \neq 2$。
-  3. 上記の式を展開して整理すると、$3x^2 + (k-7)x - 2k + 5 = 0$ という $x$ の $2$ 次方程式が得られる。この $2$ 次方程式の解が元の分数方程式の解の候補となる。
-  4.  ここで、$x=2$ が解にならないための条件を確認する。 $x=2$ を元の $2$ 次方程式に代入すると、$12 + 2(k-7) - 2k + 5 = 12 + 2k - 14 - 2k + 5 = 3 \neq 0$ となり、$x=2$ はこの $2$ 次方程式の解ではないことがわかる。したがって、この $2$ 次方程式の解はすべて元の分数方程式の解の候補となりえる。
-  5. $2$ 次方程式の実数解の個数は判別式 $D = (k-7)^2 - 4 \cdot 3 \cdot (-2k+5)$ の符号によって決まる。
-      $(1)$ $D > 0$ のとき、異なる $2$ つの実数解をもつ。
-      $(2)$ $D = 0$ のとき、重解（$1$つの実数解）をもつ。
-      $(3)$ $D < 0$ のとき、実数解をもたない。
-  6. 判別式 $D$ を計算すると、$D = k^2 - 14k + 49 + 24k - 60 = k^2 + 10k - 11$ となる。
-  7. 判別式 $D = k^2 + 10k - 11$ の符号を調べるために、$D=0$ となる $k$ の値を求めると、$k^2 + 10k - 11 = (k+11)(k-1) = 0$ より、$k=-11, 1$。
-  8. したがって、$k$ の値によって実数解の個数は以下のようになる。
-      $(1)$ $k < -11$ または $1 < k$ のとき、$D > 0$ となり、$2$ つの実数解をもつ。
-      $(2)$ $k = -11$ または $k = 1$ のとき、$D = 0$ となり、$1$ つの実数解をもつ。
-      $(3)$ $-11 < k < 1$ のとき、$D < 0$ となり、実数解をもたない。
-      
-  テーブル例：
-
-  | A列 | B列 |
-  |-----|-----|
-  | 1   | 2   |
-  | 3   | 4   |
-
-
-
-  """
-  input_text = r"""
-  与えられた方程式 $\frac{x-5}{x-2} = 3x+k$ は、変形すると $(x-5) = (3x+k)(x-2)$ となる。ただし、$x \neq 2$。
-  https://example.com/image.png [画像2](https://example.com/image2.png)
-  テーブル例：
-
-  | A列 | B列 |
-  |-----|-----|
-  | 1   | 2   |
-  | 3   | 4   |
   
-  これは段落です。  
-  - 箇条書きアイテム1
-    - 箇条書きアイテム 1-1
-      箇条書きアイテム 1-2
-  - 箇条書きアイテム2
-    箇条書きアイテム3
-  - 箇条書きアイテム4
-  """
-  # print("rich_token:", inline_text_to_rich_text(input_text))
-  tokens = md.parse(input_text)
+def parse_bulleted_list(tokens, index) -> list[dict[str,Any]]:
+  index += 1
+  blocks = []
+  while index < len(tokens) and tokens[index].type != "bullet_list_close":
+    if tokens[index].type == "list_item_open":
+      item_block, index = parse_list_item(tokens, index, "bulleted_list_item")
+      blocks.append(item_block)
+    else:
+      index += 1
+  index += 1
+  return blocks, index
 
-  for token in tokens:
-    print(f"{token.type} ({token.tag}): {token.content}")
-    if token.children:
-      for child in token.children:
-        print(f"  - child:{child}")
-        print(f"  - {child.type} ({child.tag}): {child.content}")
-  # print(f"blocks:{parse_markdown_to_blocks(input_text)}")
+# numbered_list block を parse
+def parse_numbered_list(tokens, index) -> list[dict[str,Any]]:
+  index += 1
+  block = []
+  while index < len(tokens) and tokens[index].type != "ordered_list_close":
+    if tokens[index].type == "list_item_open":
+      item_block, index = parse_list_item(tokens, index, "ordered_list_item")
+      block.append(item_block)
+    else:
+      index += 1
+  index += 1
+  return block, index
+
+# table block を parse
+def parse_table(tokens, index) -> dict[str,Any]:
+  # table_close までを一つのテーブルとみなす
+  header = []
+  rows = []
+  index += 1
+  row_data = []
+  has_column_header = False
+  table_width = 0
+  table_rows = []
+  cells = []
+  while index < len(tokens) and tokens[index].type != "table_close":
+    # 行の開始
+    if tokens[index].type == "tr_open":
+      row_data = []
+      index += 1
+    # 各セルの処理
+    elif tokens[index].type == "td_open":
+      cell_text = ""
+      index += 1
+      while index < len(tokens) and tokens[index].type != "td_close":
+        if tokens[index].type == "inline":
+          cell_text += tokens[index].content
+        index += 1
+      row_data.append(inline_text_to_rich_text(cell_text.strip()))
+      index += 1
+    # 行としてまとめる
+    elif tokens[index].type == "tr_close":
+      rows.append(row_data)
+      index += 1
+    # ヘッダー行の処理
+    elif tokens[index].type == "thead_open":
+      while tokens[index].type != "thead_close":
+        if tokens[index].type == "th_open":
+          cell_text = ""
+          index += 1
+          while index < len(tokens) and tokens[index].type != "th_close":
+            if tokens[index].type == "inline":
+              cell_text += tokens[index].content
+            index += 1
+          header.append(inline_text_to_rich_text(cell_text.strip()))
+        index += 1
+    # tbody_open/close
+    else:
+      index += 1
+  # ヘッダーの設定
+  if header:
+    has_column_header = True
+    table_width = len(header)
+  else:
+    table_width = len(rows[0])
+  # 各行の処理
+  if has_column_header:
+    for cell in header:
+      cells.append({
+        "type": "text",
+        "text": {
+          "content": cell,
+          "link": None
+        }
+      })
+    table_rows.append({
+    "type": "table_row",
+    "table_row": {
+      "cells": cells
+    }
+  })
+  cells = []
+  for row in rows:
+    for cell in row:
+      cells.append({
+        "type": "text",
+        "text": {
+          "content": cell,
+          "link": None
+        },
+        "plain_text": cell,
+        "href": None
+      })
+    table_rows.append({
+      "type": "table_row",
+      "table_row": {
+        "cells": cells
+      }
+    })
+    cells = []
+  block = {
+    "type": "table",
+    "table": {
+      "table_width": table_width,
+      "has_column_header": has_column_header,
+      "has_row_header": False,
+      "children": table_rows
+    }
+  }
+  index += 1
+  return block, index
+
+# TODO: image block を parse
+def parse_image(tokens, index) -> dict[str,Any]:
+  pass
+
+# equation block を parse
+def parse_equation(tokens, index) -> dict[str,Any]:
+  index += 1
+  expression = tokens[index] 
+  block = {
+    "type": "equation",
+    "equation": {
+      "expression": expression
+    }
+  }
+  index += 1
+  return block, index
+
+# paragraph block を parse
+def parse_paragraph(tokens, index) -> dict[str,Any]:
+  paragraph_text = ""
+  index += 1
+  # 先にこのパラグラフのテキストを処理
+  while index < len(tokens) and tokens[index].type != "paragraph_close":
+    if tokens[index].type == "inline":
+      paragraph_text += tokens[index].content + "\n"
+    index += 1
+  block = {
+    "type": "paragraph",
+    "paragraph": {
+      "rich_text": inline_text_to_rich_text(paragraph_text)
+    },
+    "color": "default"
+  }
+  index += 1
+  return block, index
+
+# あらゆる 1 ブロックに対応する parse
+def parse_any_one_block(tokens, index):
+  t = tokens[index]
+  if t.type == "heading_open":
+    return parse_heading(tokens, index)
+  if t.type == "hr":
+    return parse_divider(tokens, index)
+  if t.type == "bullet_list_open":
+    return parse_bulleted_list(tokens, index)
+  if t.type == "ordered_list_open":
+    return parse_numbered_list(tokens, index)
+  if t.type == "blockquote_open":
+    return parse_blockquote(tokens, index)
+  if t.type == "table_open":
+    return parse_table
+  if t.type in ("math_block", "amsmath"):
+    return parse_equation(tokens, index)
+  if t.type == "paragraph_open":
+    return parse_paragraph(tokens, index)
+  return None, index + 1
+
+# Markdown 風 text から blocks を作成
+def parse_blocks(tokens, index=0):
+  blocks = []
+  while index < len(tokens):
+    t = tokens[index]
+    if t.type == "heading_open":
+      block, index = parse_heading(tokens, index)
+      blocks.append(block)
+    elif t.type == "hr":
+      block, index = parse_divider(tokens, index)
+      blocks.append(block)
+    elif t.type == "bullet_list_open":
+      list_blocks, index = parse_bulleted_list(tokens, index)
+      blocks.extend(list_blocks)
+    elif t.type == "ordered_list_open":
+      list_blocks, index = parse_numbered_list(tokens, index)
+      blocks.extend(list_blocks)
+    elif t.type == "blockquote_open":
+      block, index = parse_blockquote(tokens, index)
+      blocks.append(block)
+    elif t.type == "table_open":
+      block, index = parse_table(tokens, index)
+      blocks.append(block)
+    elif t.type in ("math_block", "amsmath"):
+      block, index = parse_equation(tokens, index)
+      blocks.append(block)
+    elif t.type == "paragraph_open":
+      block, index = parse_paragraph(tokens, index)
+      blocks.append(block)
+    else:
+      index += 1
+  return blocks

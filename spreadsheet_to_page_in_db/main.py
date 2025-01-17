@@ -6,7 +6,7 @@ import pandas as pd
 import re
 from copy import deepcopy
 from rich.progress import track
-from parse import inline_text_to_rich_text, parse_blocks
+from spreadsheet_to_page_in_db.parse_old import inline_text_to_rich_text, parse_blocks
 
 def append_sibling_paragraph_to_page(headers, page_id, block_id, type, new_content):
   url = f"https://api.notion.com/v1/blocks/{page_id}/children"
