@@ -13,6 +13,9 @@ pandas = "^2.2.3"
 rich = "^13.9.4"
 setuptools = "^75.8.0"
 main = {path = "spreadsheet_to_page_in_db"}
+markdown-it-py = "^3.0.0"
+mdit-py-plugins = "^0.4.2"
+linkify-it-py = "^2.0.3"
 
 
 [build-system]
