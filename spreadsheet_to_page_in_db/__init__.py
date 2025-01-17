@@ -6,7 +6,8 @@ from .main import (
   transform_into_b_list,
   recursive_important_points,
   make_page_template,
-  fetch_all_pages
+  fetch_all_pages,
 )
 
-__version__ = '0.1.0'
+
+__version__ = '0.1.1'

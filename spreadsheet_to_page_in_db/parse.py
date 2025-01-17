@@ -1,6 +1,5 @@
 from markdown_it import MarkdownIt
 from mdit_py_plugins.dollarmath import dollarmath_plugin
-from mdit_py_plugins.amsmath import amsmath_plugin
 import re
 from typing import Any
 
