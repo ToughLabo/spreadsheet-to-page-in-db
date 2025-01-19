@@ -2,11 +2,13 @@ from markdown_it import MarkdownIt
 from mdit_py_plugins.dollarmath import dollarmath_plugin
 import re
 from typing import Any
+from mdit_py_plugins.amsmath import amsmath_plugin
 
-# TODO:下線判定を後から実装する。
+# TODO: 下線判定を後から実装する。（デフォルトで下線にすることは可能）
+# TODO: color 判定はできない。
 # 数式ブロックは inline には想定していない
 # inline text から rich text へ
-def inline_text_to_rich_text(inline_text: str) -> list[dict[str,Any]]:
+def inline_text_to_rich_text(inline_text: str, is_bold=False, is_italic=False, is_underline=False, is_strikethrough=False) -> list[dict[str,Any]]:
   # 空の場合を先に処理
   if not inline_text :
     return []
@@ -16,10 +18,10 @@ def inline_text_to_rich_text(inline_text: str) -> list[dict[str,Any]]:
   # rich_text を格納する
   rich_text_array = []
   # annotation
-  bold = False
-  italic = False
-  strikethrough = False
-  underline = False
+  bold = is_bold
+  italic = is_italic
+  strikethrough = is_strikethrough
+  underline = is_underline
   link_url = None
   # parser の仕様上必ず 1 paragraph として処理されることに注意。
   for token in tokens[1].children:
@@ -109,7 +111,7 @@ def inline_text_to_rich_text(inline_text: str) -> list[dict[str,Any]]:
 # Block の parse. 入力 index は必ずそのブロックの先頭。出力 index は必ずそのブロックの最後尾 + 1 (次のブロックの先頭)
 # ----------------------
 # heading block を parse
-def parse_heading(tokens, index) -> dict[str,Any]:
+def parse_heading(tokens, index, is_bold=False, is_italic=False, is_underline=False, is_strikethrough=False) -> dict[str,Any]:
   level = int(tokens[index].tag[-1])
   heading_text = ""
   index += 1
@@ -122,7 +124,7 @@ def parse_heading(tokens, index) -> dict[str,Any]:
   block = {
         "type": f"heading_{level}",
         f"heading_{level}": {
-          "rich_text": inline_text_to_rich_text(heading_text)
+          "rich_text": inline_text_to_rich_text(heading_text, is_bold, is_italic, is_underline, is_strikethrough)
         },
         "color": "default",
         "is_toggleable": False
@@ -141,7 +143,7 @@ def parse_divider(tokens, index) -> dict[str,Any]:
 
 # TODO: emojiに関する処理を改善する。
 # quote or callout block を parse
-def parse_blockquote(tokens, index) -> dict[str,Any]:
+def parse_blockquote(tokens, index, is_bold=False, is_italic=False, is_underline=False, is_strikethrough=False) -> dict[str,Any]:
   p_text = ""
   children = []
   index += 1
@@ -154,7 +156,7 @@ def parse_blockquote(tokens, index) -> dict[str,Any]:
       index += 1
     index += 1
   while index < len(tokens) and tokens[index].type != "blockquote_close":
-    block, index = parse_any_one_block(tokens, index)
+    block, index = parse_any_one_block(tokens, index, is_bold, is_italic, is_underline, is_strikethrough)
     if block:
       children.append(block)
 
@@ -168,7 +170,7 @@ def parse_blockquote(tokens, index) -> dict[str,Any]:
     block = {
       "type": "callout",
       "callout":{
-        "rich_text": inline_text_to_rich_text(match.group(2))
+        "rich_text": inline_text_to_rich_text(match.group(2), is_bold, is_italic, is_underline, is_strikethrough)
       },
       "icon": {
         "emoji": match.group(1)
@@ -181,7 +183,7 @@ def parse_blockquote(tokens, index) -> dict[str,Any]:
     block = {
       "type": "quote",
       "quote": {
-        "rich_text": inline_text_to_rich_text(p_text)
+        "rich_text": inline_text_to_rich_text(p_text, is_bold, is_italic, is_underline, is_strikethrough)
       },
       "color": "default",
       "children": children
@@ -190,7 +192,7 @@ def parse_blockquote(tokens, index) -> dict[str,Any]:
   return block, index
 
 # list_item を parse 
-def parse_list_item(tokens, index, type) -> dict[str,Any]:
+def parse_list_item(tokens, index, type, is_bold=False, is_italic=False, is_underline=False, is_strikethrough=False) -> dict[str,Any]:
   list_text = ""
   children = []
   index += 1
@@ -204,7 +206,7 @@ def parse_list_item(tokens, index, type) -> dict[str,Any]:
     index += 1
   # 再帰的に children を取得
   while index < len(tokens) and tokens[index].type != "list_item_close":
-    block, index = parse_any_one_block(tokens, index)
+    block, index = parse_any_one_block(tokens, index, is_bold, is_italic, is_underline, is_strikethrough)
     if block:
       children.append(block)
 
@@ -212,7 +214,7 @@ def parse_list_item(tokens, index, type) -> dict[str,Any]:
   block = {
     "type": type,
     type :{
-      "rich_text": inline_text_to_rich_text()
+      "rich_text": inline_text_to_rich_text(list_text, is_bold, is_italic, is_underline, is_strikethrough)
     },
     "color": "default",
     "children": children
@@ -221,12 +223,12 @@ def parse_list_item(tokens, index, type) -> dict[str,Any]:
   return block, index
 
   
-def parse_bulleted_list(tokens, index) -> list[dict[str,Any]]:
+def parse_bulleted_list(tokens, index, is_bold=False, is_italic=False, is_underline=False, is_strikethrough=False) -> list[dict[str,Any]]:
   index += 1
   blocks = []
   while index < len(tokens) and tokens[index].type != "bullet_list_close":
     if tokens[index].type == "list_item_open":
-      item_block, index = parse_list_item(tokens, index, "bulleted_list_item")
+      item_block, index = parse_list_item(tokens, index, "bulleted_list_item", is_bold, is_italic, is_underline, is_strikethrough)
       blocks.append(item_block)
     else:
       index += 1
@@ -234,12 +236,12 @@ def parse_bulleted_list(tokens, index) -> list[dict[str,Any]]:
   return blocks, index
 
 # numbered_list block を parse
-def parse_numbered_list(tokens, index) -> list[dict[str,Any]]:
+def parse_numbered_list(tokens, index, is_bold=False, is_italic=False, is_underline=False, is_strikethrough=False) -> list[dict[str,Any]]:
   index += 1
   block = []
   while index < len(tokens) and tokens[index].type != "ordered_list_close":
     if tokens[index].type == "list_item_open":
-      item_block, index = parse_list_item(tokens, index, "ordered_list_item")
+      item_block, index = parse_list_item(tokens, index, "ordered_list_item", is_bold, is_italic, is_underline, is_strikethrough)
       block.append(item_block)
     else:
       index += 1
@@ -247,7 +249,7 @@ def parse_numbered_list(tokens, index) -> list[dict[str,Any]]:
   return block, index
 
 # table block を parse
-def parse_table(tokens, index) -> dict[str,Any]:
+def parse_table(tokens, index, is_bold=False, is_italic=False, is_underline=False, is_strikethrough=False) -> dict[str,Any]:
   # table_close までを一つのテーブルとみなす
   header = []
   rows = []
@@ -270,7 +272,7 @@ def parse_table(tokens, index) -> dict[str,Any]:
         if tokens[index].type == "inline":
           cell_text += tokens[index].content
         index += 1
-      row_data.append(inline_text_to_rich_text(cell_text.strip()))
+      row_data.append(inline_text_to_rich_text(cell_text.strip(), is_bold, is_italic, is_underline, is_strikethrough))
       index += 1
     # 行としてまとめる
     elif tokens[index].type == "tr_close":
@@ -286,7 +288,7 @@ def parse_table(tokens, index) -> dict[str,Any]:
             if tokens[index].type == "inline":
               cell_text += tokens[index].content
             index += 1
-          header.append(inline_text_to_rich_text(cell_text.strip()))
+          header.append(inline_text_to_rich_text(cell_text.strip(), is_bold, is_italic, is_underline, is_strikethrough))
         index += 1
     # tbody_open/close
     else:
@@ -362,7 +364,7 @@ def parse_equation(tokens, index) -> dict[str,Any]:
   return block, index
 
 # paragraph block を parse
-def parse_paragraph(tokens, index) -> dict[str,Any]:
+def parse_paragraph(tokens, index, is_bold=False, is_italic=False, is_underline=False, is_strikethrough=False) -> dict[str,Any]:
   paragraph_text = ""
   index += 1
   # 先にこのパラグラフのテキストを処理
@@ -373,7 +375,7 @@ def parse_paragraph(tokens, index) -> dict[str,Any]:
   block = {
     "type": "paragraph",
     "paragraph": {
-      "rich_text": inline_text_to_rich_text(paragraph_text)
+      "rich_text": inline_text_to_rich_text(paragraph_text, is_bold, is_italic, is_underline, is_strikethrough)
     },
     "color": "default"
   }
@@ -381,54 +383,56 @@ def parse_paragraph(tokens, index) -> dict[str,Any]:
   return block, index
 
 # あらゆる 1 ブロックに対応する parse
-def parse_any_one_block(tokens, index):
+def parse_any_one_block(tokens, index, is_bold=False, is_italic=False, is_underline=False, is_strikethrough=False) -> dict[str,Any]:
   t = tokens[index]
   if t.type == "heading_open":
-    return parse_heading(tokens, index)
+    return parse_heading(tokens, index, is_bold, is_italic, is_underline, is_strikethrough)
   if t.type == "hr":
     return parse_divider(tokens, index)
   if t.type == "bullet_list_open":
-    return parse_bulleted_list(tokens, index)
+    return parse_bulleted_list(tokens, index, is_bold, is_italic, is_underline, is_strikethrough)
   if t.type == "ordered_list_open":
-    return parse_numbered_list(tokens, index)
+    return parse_numbered_list(tokens, index, is_bold, is_italic, is_underline, is_strikethrough)
   if t.type == "blockquote_open":
-    return parse_blockquote(tokens, index)
+    return parse_blockquote(tokens, index, is_bold, is_italic, is_underline, is_strikethrough)
   if t.type == "table_open":
-    return parse_table
+    return parse_table(tokens, index, is_bold, is_italic, is_underline, is_strikethrough)
   if t.type in ("math_block", "amsmath"):
     return parse_equation(tokens, index)
   if t.type == "paragraph_open":
-    return parse_paragraph(tokens, index)
+    return parse_paragraph(tokens, index, is_bold, is_italic, is_underline, is_strikethrough)
   return None, index + 1
 
 # Markdown 風 text から blocks を作成
-def parse_blocks(tokens, index=0):
+def parse_blocks(text, index=0, is_bold=False, is_italic=False, is_underline=False, is_strikethrough=False) -> list[dict[str,Any]]:
   blocks = []
+  md = MarkdownIt("gfm-like").use(dollarmath_plugin, allow_space=True, double_inline=True).use(amsmath_plugin)
+  tokens = md.parse(text)
   while index < len(tokens):
     t = tokens[index]
     if t.type == "heading_open":
-      block, index = parse_heading(tokens, index)
+      block, index = parse_heading(tokens, index, is_bold, is_italic, is_underline, is_strikethrough)
       blocks.append(block)
     elif t.type == "hr":
       block, index = parse_divider(tokens, index)
       blocks.append(block)
     elif t.type == "bullet_list_open":
-      list_blocks, index = parse_bulleted_list(tokens, index)
+      list_blocks, index = parse_bulleted_list(tokens, index, is_bold, is_italic, is_underline, is_strikethrough)
       blocks.extend(list_blocks)
     elif t.type == "ordered_list_open":
-      list_blocks, index = parse_numbered_list(tokens, index)
+      list_blocks, index = parse_numbered_list(tokens, index, is_bold, is_italic, is_underline, is_strikethrough)
       blocks.extend(list_blocks)
     elif t.type == "blockquote_open":
-      block, index = parse_blockquote(tokens, index)
+      block, index = parse_blockquote(tokens, index, is_bold, is_italic, is_underline, is_strikethrough)
       blocks.append(block)
     elif t.type == "table_open":
-      block, index = parse_table(tokens, index)
+      block, index = parse_table(tokens, index, is_bold, is_italic, is_underline, is_strikethrough)
       blocks.append(block)
     elif t.type in ("math_block", "amsmath"):
       block, index = parse_equation(tokens, index)
       blocks.append(block)
     elif t.type == "paragraph_open":
-      block, index = parse_paragraph(tokens, index)
+      block, index = parse_paragraph(tokens, index, is_bold, is_italic, is_underline, is_strikethrough)
       blocks.append(block)
     else:
       index += 1
