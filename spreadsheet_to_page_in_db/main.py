@@ -6,61 +6,33 @@ import pandas as pd
 import re
 from copy import deepcopy
 from rich.progress import track
-from spreadsheet_to_page_in_db.parse_old import inline_text_to_rich_text, parse_blocks
+from io import StringIO
+import chardet
+from notion_pre_process import extract_uuid_from_notion_url
+from make_page import make_complete_block_for_template, delete_pages, make_page_property
+from python_filter import filter_dataframe
 
-def append_sibling_paragraph_to_page(headers, page_id, block_id, type, new_content):
-  url = f"https://api.notion.com/v1/blocks/{page_id}/children"
+# DB に新しいページを作成する
+def create_new_page_in_db(headers, database_id, icon, cover, properties, children, index=None):
+  url = "https://api.notion.com/v1/pages"
+  parent = {"database_id": database_id}
   payload = {
-    "children": [
-      {
-        type: {
-          "rich_text": [
-            {
-              "text": {
-                "content": new_content
-              }
-            }
-          ]
-        }
-      }
-    ],
-    "after": block_id
+    "parent": parent,
+    "icon": icon,
+    "cover": cover,
+    "properties": properties,
+    "children": children
   }
-  res = requests.patch(url, headers=headers, data=json.dumps(payload))
+  res = requests.post(url=url, headers=headers, json=payload)
   if res.status_code != 200:
-    print(f"Error: {res.status_code}")
-    print(res.text)
+    if index:
+      print(f"ページを作成する際にエラーが発生しました。index = {index}")
+    else:
+      print(f"ページを作成する際にエラーが発生しました。")
+    res.raise_for_status()
   return res.json()
 
-def append_paragraph_to_toggle(headers, toggle_block_id, text_content):
-  """
-  既存のトグルブロックに子ブロック（段落）を追加する
-  """
-  print(f"text_content:{text_content}")
-  url = f"https://api.notion.com/v1/blocks/{toggle_block_id}/children"
-  # TODO: いい感じに修正が必要　ひとまず上書きではなく、追加するように調整
-  payload = {
-    "children": [
-      {
-        "paragraph": {
-          "rich_text": [
-            {
-              "text": {
-                "content": text_content
-              }
-            }
-          ]
-        }
-      }
-    ]
-  }
-
-  res = requests.patch(url, headers=headers, data=json.dumps(payload))
-  if res.status_code == 200:
-    print("成功:", res.json())
-  else:
-    print("失敗:", res.status_code, res.text)
-
+# 既存のページに追加する
 def append_contents(headers, page_id, blocks):
   url = f"https://api.notion.com/v1/blocks/{page_id}/children"
   payload = {
@@ -85,280 +57,6 @@ def append_contents(headers, page_id, blocks):
     requests.patch(f"https://api.notion.com/v1/pages/{page_id}", headers=headers, data=json.dumps(payload_for_status))
   return res.json()
 
-# 問題文処理用
-# [{title: "", problem: ""}, ,,,] の形式で返す。
-# 先頭と末尾の空行を削除してからresultsに追加する処理
-def flush_chunk(current_chunk):
-  # 先頭の空行を削除
-  while current_chunk and not current_chunk[0].strip():
-    current_chunk.pop(0)
-  # 末尾の空行を削除
-  while current_chunk and not current_chunk[-1].strip():
-    current_chunk.pop()
-  return current_chunk
-
-def separate_problems(problems: str):
-  lines = problems.splitlines(keepends=False)
-  results = []
-  current_chunk = []
-  template = {"title":"", "problem":""}
-  problem_comb = deepcopy(template)
-
-  for line in lines:
-    # 「例題」という文字列が含まれる行があれば
-    if '例題' in line:
-      # いままでの本文を確定して、先頭＆末尾の空行を除去
-      if problem_comb["title"]:
-        problem_content = flush_chunk(current_chunk)
-        problem_comb["problem"] = '\n'.join(problem_content)
-        results.append(problem_comb)
-        problem_comb = deepcopy(template)
-      problem_comb["title"] = line
-      current_chunk = []
-    else:
-      current_chunk.append(line)
-
-  # ループ終了後、まだ本文が残っていれば処理して追加
-  problem_content = flush_chunk(current_chunk)
-  problem_comb["problem"] = '\n'.join(problem_content)
-  results.append(problem_comb)
-
-  return results
-
-# チェックの解答用、numbered_list を処理するため
-def transform_into_n_list(input_text):
-  # 正規表現パターン: 数字で始まり、その後に内容が続くセクションをキャプチャ
-  # または、空行が存在する箇所で区切る
-  pattern = r"(^\d+\.\s.*?)(?=^\d+\.\s|\Z)|(^.*?(?:\n\s*\n|\Z))"
-  # セクションを抽出
-  matches = re.findall(pattern, input_text, flags=re.MULTILINE | re.DOTALL)
-  # matches はタプルのリストになるため、各要素をフラット化してフィルタリング
-  flattened_matches = [item.strip() for sublist in matches for item in sublist if item.strip()]
-  # 余分な空白を除去して返す
-  return flattened_matches
-
-# ここで絶対に学んでほしいこと用、bulleted_list を処理するため ネストされた箇条書きまで処理できる
-# 出力形式
-def transform_into_b_list(input_text):
-  """
-  空白行で区切られた通常テキストも含め、
-  Markdown 風の箇条書きを階層構造として解析して返す。
-  出力形式は [{"text": ..., "indent_level": ..., "children": [...]}, ...] のようにする。
-  """
-
-  lines = input_text.splitlines()
-
-  # 箇条書きの正規表現
-  #  - 行頭の空白 (\s*)
-  #  - 箇条書き記号 ([\*-])
-  #  - 少なくとも1つの空白 (\s+)
-  #  - 残りのテキスト (.*)
-  bullet_pattern = re.compile(r'^(\s*)([\*-])\s+(.*)')
-
-  # 結果リスト(トップレベル要素を格納)
-  result = []
-  # スタック (階層管理用)
-  stack = []
-  # 箇条書きでない行を一時的に貯めるバッファ
-  non_bullet_buffer = []
-
-  def flush_non_bullet():
-    """
-    non_bullet_buffer に溜まった行を1つのノードとして
-    indent_level=0 で result に追加し、バッファをクリアする。
-    その際、箇条書きの階層を管理する stack もリセットしておく。
-    """
-    if non_bullet_buffer:
-      # 連続する非箇条書き行は空白行で区切られたひとまとまりとして扱う
-      text = "\n".join(non_bullet_buffer).strip()
-      if text:  # 空行だけになる可能性があるのでチェック
-        node = {
-          "text": text,
-          "indent_level": 0,
-          "children": []
-        }
-        result.append(node)
-      non_bullet_buffer.clear()
-      # 箇条書きの階層をリセット (通常テキストが割り込んだら階層は途切れる、という扱い)
-      stack.clear()
-
-  for line in lines:
-    # 箇条書き（bullet）であるか確認
-    match = bullet_pattern.match(line)
-    if match:
-      # bullet 行なので、まずは non_bullet_buffer をフラッシュ
-      flush_non_bullet()
-
-      # インデント部分、箇条書き記号、テキスト部分を取得
-      indent_str, bullet_mark, text = match.groups()
-      indent_level = len(indent_str)  # スペースの長さをインデントレベルとする
-
-      node = {
-        "text": text.strip(),
-        "indent_level": indent_level,
-        "children": []
-      }
-
-      if not stack:
-        # スタックが空ならトップレベル要素
-        result.append(node)
-        stack.append(node)
-      else:
-        # 現在のスタック末尾のインデントよりも浅い、または同じなら戻る
-        while stack and indent_level <= stack[-1]["indent_level"]:
-          stack.pop()
-
-        if stack:
-          # スタック末尾に子要素として追加
-          stack[-1]["children"].append(node)
-        else:
-          # すべて pop されたらトップレベルに追加
-          result.append(node)
-
-        stack.append(node)
-
-    else:
-      # bullet 行ではない
-      if not line.strip():
-        # 空白行 → non_bullet_buffer をフラッシュして区切り扱いに
-        flush_non_bullet()
-      else:
-        # 非箇条書き行 → 一時バッファに追加
-        non_bullet_buffer.append(line)
-
-  # 最後にバッファが残っていればフラッシュ
-  flush_non_bullet()
-
-  return result
-
-# 再帰的に bulleted list を処理
-def recursive_important_points(important_point):
-  # bulleted list json テンプレートの読み込み
-  with open("const/json/math/important_point_text_bulleted_list_item.json", "r", encoding="utf-8") as file:
-    json_template = json.load(file)
-  current_template = deepcopy(json_template)
-  # 再帰的に children を解決
-  children = []
-  if important_point["children"] != []:
-    for child_important_point in important_point["children"]:
-      child_json = recursive_important_points(child_important_point)
-      children.append(child_json)
-  current_template["bulleted_list_item"]["rich_text"] = create_parsed_blocks(important_point["text"], is_rich_text=True)
-  current_template["bulleted_list_item"]["children"] = children
-  return current_template
-
-# 例題の処理だけ別個でする（数学用に作ってある。）
-def make_page_template(problems, check_answer, important_points, reference, practice_problem, practice_answer):
-  # 辞書で block を蓄積
-  blocks = {}
-  result = []
-  # 例題がある場合のフラグ
-  is_problem = False
-  # template の読み込み
-  with open("const/json/math/problem_h3.json", "r", encoding="utf-8") as file:
-    data = json.load(file)
-    blocks["problem"] = deepcopy(data)
-  with open("const/json/math/problem_text_toggle.json", "r", encoding="utf-8") as file:
-    data = json.load(file)
-    blocks["problem_text"] = deepcopy(data)
-  with open("const/json/math/check_answer_h3.json", "r", encoding="utf-8") as file:
-    data = json.load(file)
-    blocks["check_answer"] = deepcopy(data)
-  with open("const/json/math/check_answer_contents_numbered_list_item.json", "r", encoding="utf-8") as file:
-    data = json.load(file)
-    blocks["check_answer_contents"] = deepcopy(data)
-  with open("const/json/math/important_point_h3.json", "r", encoding="utf-8") as file:
-    data = json.load(file)
-    blocks["important_point"] = deepcopy(data)
-  with open("const/json/math/important_point_text_bulleted_list_item.json", "r", encoding="utf-8") as file:
-    data = json.load(file)
-    blocks["important_point_text"] = deepcopy(data)
-  with open("const/json/math/complement_h3.json", "r", encoding="utf-8") as file:
-    data = json.load(file)
-    blocks["complement"] = deepcopy(data)
-  with open("const/json/math/complement_contents_toggle_h3.json", "r", encoding="utf-8") as file:
-    data = json.load(file)
-    blocks["complement_contents"] = deepcopy(data)
-  with open("const/json/math/reference_h3.json", "r", encoding="utf-8") as file:
-    data = json.load(file)
-    blocks["reference"] = deepcopy(data)
-  with open("const/json/math/main_reference_toggle_underline.json", "r", encoding="utf-8") as file:
-    data = json.load(file)
-    blocks["main_reference"] = deepcopy(data)
-  with open("const/json/math/sub_reference_toggle_underline.json", "r", encoding="utf-8") as file:
-    data = json.load(file)
-    blocks["sub_reference"] = deepcopy(data)
-  with open("const/json/math/practice_h3.json", "r", encoding="utf-8") as file:
-    data = json.load(file)
-    blocks["practice"] = deepcopy(data)
-  with open("const/json/math/practice_toggle.json", "r", encoding="utf-8") as file:
-    data = json.load(file)
-    blocks["practice_problem"] = deepcopy(data)
-  with open("const/json/math/practice_answer_toggle.json", "r", encoding="utf-8") as file:
-    data = json.load(file)
-    blocks["practice_answer"] = deepcopy(data)
-  with open("const/json/math/paragraph.json", "r", encoding="utf-8") as file:
-    data = json.load(file)
-    blocks["paragraph"] = deepcopy(data)
-  
-  # 問題文（例題がある場合のみ）
-  if(problems):
-    is_problem = True
-    # タイトル
-    result.append(blocks["problem"])
-    # 中身
-    separated_problems = separate_problems(problems)
-    for p in separated_problems:
-      title = create_parsed_blocks(p["title"], is_rich_text=True, is_bold=True)
-      problem = create_parsed_blocks(p["problem"])
-      problem_text_json = deepcopy(blocks["problem_text"])
-      problem_text_json["toggle"]["rich_text"] = title
-      problem_text_json["toggle"]["children"] = problem
-      result.append(problem_text_json)
-  # チェックの解答
-  # タイトル
-  result.append(blocks["check_answer"])
-  # 中身
-  check_answers = transform_into_n_list(check_answer)
-  for check_answer in check_answers:
-    check_answer_json = deepcopy(blocks["check_answer_contents"])
-    check_answer_json["numbered_list_item"]["rich_text"] = create_parsed_blocks(check_answer, is_rich_text=True)
-    result.append(check_answer_json)
-  # ここで絶対に学んでほしいこと
-  # タイトル
-  result.append(blocks["important_point"])
-  # 中身
-  important_points = transform_into_b_list(important_points)
-  for important_point in important_points:
-    important_point_json = recursive_important_points(important_point)
-    result.append(important_point_json)
-  # これを理解すれば完璧！
-  result.append(blocks["complement"])
-  result.append(blocks["complement_contents"])
-  # 参照
-  result.append(blocks["reference"])
-  reference_text = create_parsed_blocks(reference, is_rich_text=True)
-  main_reference_json = blocks["main_reference"]
-  main_reference_json["toggle"]["children"][0]["paragraph"]["rich_text"] = reference_text
-  result.append(main_reference_json)
-  result.append(blocks["paragraph"])
-  result.append(blocks["sub_reference"])
-  result.append(blocks["paragraph"])
-  # 練習問題
-  result.append(blocks["practice"])
-  practice_problem_blocks = create_parsed_blocks(practice_problem)
-  practice_problem_json = blocks["practice_problem"]
-  practice_problem_json["toggle"]["children"] = practice_problem_blocks
-  result.append(blocks["practice_problem"])
-  result.append(blocks["paragraph"])
-  practice_answer_blocks = create_parsed_blocks(practice_answer)
-  practice_answer_json = blocks["practice_answer"]
-  practice_answer_json["toggle"]["children"] = practice_answer_blocks
-  result.append(blocks["practice_answer"])
-  
-  return result
-
-# Notion データベース内の 全てのページを取得する。
 def fetch_all_pages(headers, url, payload):
   all_pages = []
   payload["page_size"] = 100
@@ -386,7 +84,7 @@ def main():
 
   NOTION_API_KEY = os.getenv("NOTION_API_KEY")
   NOTION_VERSION = os.getenv("NOTION_VERSION")
-  database_id = os.getenv("NOTION_DATABASE_ID")
+  NOTION_TEMPLATE_BOX_DATABASE_ID = os.getenv("NOTION_TEMPLATE_BOX_DATABASE_ID")
   BLOCK_1_COLUMN = os.getenv("BLOCK_1_COLUMN")
   BLOCK_2_COLUMN = os.getenv("BLOCK_2_COLUMN")
   BLOCK_3_COLUMN = os.getenv("BLOCK_3_COLUMN")
@@ -396,16 +94,276 @@ def main():
   BLOCK_7_COLUMN = os.getenv("BLOCK_7_COLUMN")
   BLOCK_8_COLUMN = os.getenv("BLOCK_8_COLUMN")
   CSV_FILE_NAME = os.getenv("CSV_FILE_NAME")
+  database_id = os.getenv("NOTION_DATABASE_ID")
+  test_database_id = os.getenv("NOTION_TEST_DATABASE_ID")
+  test_page_id = os.getenv("NOTION_TEST_PAGE_ID")
+  test_block_id = "d5803e6c-c811-4ec0-983f-46cfeac6b6a4"
   
-  df = pd.read_csv(f"const/csv/math/{CSV_FILE_NAME}", header=0, usecols=[BLOCK_1_COLUMN, BLOCK_2_COLUMN, BLOCK_3_COLUMN, BLOCK_4_COLUMN, BLOCK_5_COLUMN, BLOCK_6_COLUMN, BLOCK_7_COLUMN, BLOCK_8_COLUMN])
-  df = df.fillna('')
-  url_for_page_ids = f"https://api.notion.com/v1/databases/{database_id}/query"
-
+  # TODO: template id を保持しておく。 TEMPLATE_IDS = []
+  # TODO: ID を使って filter をかけて query を post する。https://developers.notion.com/reference/post-database-query-filter#id
+  # TODO: CSV を複数読み込むと同時にTEMPLATE_ID と set にしておく
+  
+  # df = pd.read_csv(f"const/csv/math/{CSV_FILE_NAME}", header=0, usecols=[BLOCK_1_COLUMN, BLOCK_2_COLUMN, BLOCK_3_COLUMN, BLOCK_4_COLUMN, BLOCK_5_COLUMN, BLOCK_6_COLUMN, BLOCK_7_COLUMN, BLOCK_8_COLUMN])
+  # df = df.fillna('')
+  # url_for_page_ids = f"https://api.notion.com/v1/databases/{database_id}/query"
+  url_for_template_box = f"https://api.notion.com/v1/databases/{database_id}"
+  url_for_specific_template_pages = f"https://api.notion.com/v1/databases/{database_id}/query"
+  url_for_test_db = f"https://api.notion.com/v1/databases/{test_database_id}/query"
+  url_for_test_retrieve_a_page = f"https://api.notion.com/v1/pages/{test_page_id}"
+  url_for_test_retrive_block_children = f"https://api.notion.com/v1/blocks/{test_page_id}/children"
+  url_for_test_block = f"https://api.notion.com/v1/blocks/{test_block_id}"
+  url_for_test_block_children = f"https://api.notion.com/v1/blocks/{test_block_id}/children"
   headers = {
     "Authorization": f"Bearer {NOTION_API_KEY}",
     "Notion-Version": NOTION_VERSION,
     "Content-Type": "application/json"
   }
+  # filter for template Box
+  filter_for_template_box = {
+    "filter": {
+      "property": "Status",
+      "status": {
+        "equals": "実行予約"
+      }
+    }
+  }
+  # ↑
+  # |
+  # |
+  # |
+  # ----------------------------------------------------------------------------------------------
+  
+  
+  res = requests.post(url=url_for_test_db, headers=headers, json=filter_for_template_box)
+  test_db = res.json()
+  res = requests.get(url=url_for_test_retrieve_a_page,headers=headers)
+  test_page = res.json()
+  res = requests.get(url=url_for_test_retrive_block_children, headers=headers)
+  test_page_children = res.json()
+  url_for_database_mention = test_page["properties"]["Database Mention"]["rich_text"][0]["href"]
+  database_id = extract_uuid_from_notion_url(url=url_for_database_mention)
+  res = requests.get(url=url_for_test_block, headers=headers)
+  test_block = res.json()
+  res = requests.get(url=url_for_test_block_children, headers=headers)
+  test_block_children = res.json()
+  
+  # csv file の取得（Notion API から）
+  # url_for_csv = test_page["properties"]["csv file"]["files"][0]["file"]["url"]
+  # csv_response = requests.get(url_for_csv)
+  # if csv_response.status_code == 200:
+  #   print(f"csv_response:{csv_response}")
+  #   csv_data = csv_response.content
+  #   encoding_detected = chardet.detect(csv_data)["encoding"]
+  #   print(f"Detected encoding: {encoding_detected}")
+  #   df = pd.read_csv(StringIO(csv_data.decode(encoding_detected)))
+  #   print(df.head())
+  # else:
+  #   print(f"Failed to download file: {csv_response.status_code}")
+  print(f"test_db:{test_db}")
+  print(f"test_page:{test_page}")
+  print(f"test_page_children:{test_page_children}")
+  print(f"test_block:{test_block}")
+  print(f"test_block_children:{test_block_children}")
+  # TODO: property_dict = { property_name, property_id, column_name } data から property_name, property_id, column_name を set にして 保存しておく。
+  # TODO: block_dict = { block_name, block_id, column_name, annotation_type (list) } これも同じ、ブロック変数を保存しておく。
+  
+  # TODO: 
+  exit()
+  # -------------------------------------------------------------------------------------------------------------------
+  # |
+  # |
+  # |
+  # |
+  # ↓
+  # delete flag（scrap and build か否か）TODO: 後でdeleteしないパターンについても考えてみる。
+  delete_flag = True
+  # Template Box から テンプレートのデータを取得
+  res_template_box = requests.post(url=url_for_template_box, headers=headers, json=filter_for_template_box)
+  template_data = res_template_box.json()
+  if template_data.status_code != 200:
+    print("Template Box から テンプレートのデータを取得する際にエラーが発生しました。")
+    print(rf"status_code:{template_data.status_code}\n error message: {res_template_box.message}")
+  
+  template_jsons = template_data["result"]
+  # 実行 Status をまとめて変更
+  for template in template_jsons:
+    template_id = template["id"]
+    url_for_template_property = f"https://api.notion.com/v1/pages/{template_id}"
+    data = {
+      "properties":[
+        {
+          "Status": "実行待機中"
+        }
+      ]
+    }
+    res = requests.patch(url=url_for_template_property, headers=headers, data=data)
+    if res.status_code != 200:
+      print("Template Box から テンプレートのデータを取得する際にエラーが発生しました。")
+      res.raise_for_status()
+  
+  # 各テンプレートからのページ作成を実行
+  for index, template_page_properties_json in enumerate(template_jsons):
+    
+    # 実行 Status の変更
+    template_id = template_page_properties_json["id"]
+    url_for_template_property = f"https://api.notion.com/v1/pages/{template_id}"
+    data = {
+      "properties":[
+        {
+          "Status": "実行中"
+        }
+      ]
+    }
+    res = requests.patch(url=url_for_template_property, headers=headers, data=data)
+    if res.status_code != 200:
+      print("実行待機中から実行中に変更する際にエラーが発生しました。({index+1}番目) ")
+      res.raise_for_status()
+    
+    # Page Property などの取得
+    # 出力先のデータベースの ID の取得
+    output_database_id = template_page_properties_json["properties"]["Database Mention"]["rich_text"][0]["href"]
+    # icon や cover を取得（もともと Notion にある絵文字や cover じゃないと手動登録したものは使えないので注意）カスタムは drive などにおくしかない。
+    if template_page_properties_json["cover"] and template_page_properties_json["cover"]["type"] == external:
+      cover_default = template_page_properties_json["cover"]
+    else:
+      cover_default = None
+    if template_page_properties_json["icon"] and template_page_properties_json["icon"]["type"] == "emoji":
+      icon_default = template_page_properties_json["icon"]
+    elif template_page_properties_json["icon"] and template_page_properties_json["icon"]["type"] == "custom_emoji":
+      icon_default = {"type": "custom_emoji", "custom_emoji": {"id": template_page_properties_json["icon"]["custom_emoji"]}}
+    else:
+      icon_default = None
+    
+    # csv file の読み込み
+    # TODO: csv file を colab から読み取る処理を追加する
+    # TODO: csv file に関して順番付けする。コードを書く（スタート位置を指定できるようにする。）
+    
+    url_for_csv = template_page_properties_json["properties"]["csv file"]["files"][0]["file"]["url"]
+    csv_response = requests.get(url_for_csv)
+    if csv_response.status_code == 200:
+      csv_data = csv_response.content
+      encoding_detected = chardet.detect(csv_data)["encoding"]
+      df = pd.read_csv(StringIO(csv_data.decode(encoding_detected)))
+    else:
+      print("csv file ({index+1}番目) を取得する際にエラーが発生しました。")
+      res.raise_for_status()
+    
+    # Notion と Spreadsheet を結びつける変数及び、トップ位置のテンプレートの取得
+    # 変数の準備（cover & icon 列、ブロック変数・列名、DB変数・列名、作成するページのフィルター（TODO:ひとまず Spreadsheet の列名のフィルターを想定）、使う列をまとめて取得、テンプレートの始まりから立つフラグ）
+    # Notion 内部にアップロードしたファイルは使えないので注意！
+    COVER_ICON_DICT = {"cover": "", "icon":""}
+    BLOCK_VAR_BOX = []
+    DB_PROPERTY_BOX = []
+    FILTERS_BOX = []
+    USE_COL_BOX = []
+    TEMPLATE_BLOCKS = []
+    template_flag = False
+    # template page の読み込み
+    url_for_template_page_children = f"https://api.notion.com/v1/blocks/{template_id}/children"
+    res = requests.get(url=url_for_template_page_children, headers=headers)
+    if res.status_code != 200:
+      print(f"Template page ({index+1}番目) の内容を取得する際にエラーが発生しました。")
+      res.raise_for_status()
+    template_blocks = res.json()["results"]
+    for template_block in template_blocks:
+      # 環境変数の取得
+      if not template_flag:
+        # テンプレートの開始点を取得
+        if template_block["type"] == "callout" and template_block["callout"]["icon"]["type"] == "emoji" and template_block["callout"]["icon"]["emoji"] == '📋':
+          template_flag = True
+          continue
+        # 環境変数のデータベースを検知
+        elif template_block["type"] == "child_database":
+          # cover & icon 
+          if template_block["child_database"]["title"] == "cover & icon":
+            pass
+          
+          # Block Var & Column Name （ここで型までつける）
+          elif template_block["child_database"]["title"] == "Block Var & Column Name":
+            pass
+          
+          # DB Property & Column Name
+          elif template_block["child_database"]["title"] == "DB Property & Column Name":
+            pass
+          
+          # Filters
+          elif template_block["child_database"]["title"] == "Filters":
+            pass
+          
+          # その他
+          else:
+            continue
+      # Template のトップ Block の情報を取得
+      else:
+        block_id = block["id"]
+        has_children = block["has_children"]
+        block_type = block["type"]
+        # rich_text があるブロック
+        if block_type not in ["bookmark", "child_page", "image", "divider", "column_list", "table", "equation"]:
+          rich_text = block[type]["rich_text"]
+        # rich_text がないブロック
+        else:
+          rich_text = []
+        # BLOCKを順番通りに元に戻す。
+        TEMPLATE_BLOCKS.append({
+          "id": block_id,
+          "has_children": has_children,
+          "type": block_type,
+          "rich_text": rich_text
+        })
+    
+    # フィルターをかけて csv から data を取得
+    # まず必要な列だけ抜き出す。
+    df = df[USE_COL_BOX]
+    # 次に、フィルターをかける
+    if len(FILTERS_BOX):
+      df = filter_dataframe(df, FILTERS_BOX)
+    
+    # Page の作成
+    # まず、古いページを Filter に応じて削除する
+    parsed_notion_filter = delete_pages(output_database_id=output_database_id, headers=headers,FILTERS_BOX=FILTERS_BOX)
+    # DB Property と Spreadsheet Column との対応関係を作る。
+    url_for_output_database = f"https://api.notion.com/v1/blocks/{output_database_id}"
+    # 各ページの作成
+    for row in track(zip(*[df[col] for col in df.columns]), description="Creating Pages..."):
+      df_row = dict(zip(df.columns, row))
+      children = []
+      for template_block in TEMPLATE_BLOCKS:
+        # block をテンプレートから完成させる。
+        complete_block = make_complete_block_for_template(template_block, df_row, BLOCK_VAR_BOX)
+        children.append(complete_block)
+      # cover の処理
+      if COVER_ICON_DICT["cover"]:
+        cover = {"type": "external", "external": {"url": df_row[COVER_ICON_DICT["cover"]]}}
+      else:
+        cover = cover_default
+      # icon の処理
+      if COVER_ICON_DICT["icon"]:
+        if len(COVER_ICON_DICT["icon"]) > 1:
+          icon = {"type": "custom_emoji", "custom_emoji": {"id": COVER_ICON_DICT["icon"]}}
+        else:
+          icon = {"type": "emoji", "emoji": COVER_ICON_DICT["icon"] }
+      else:
+        icon = icon_default
+      # page properties の処理
+      properties = {}
+      for property_element in DB_PROPERTY_BOX:
+        property_name = property_element["property_name"]
+        property_type = property_element["property_type"]
+        property_content = property_element["property_content"]
+        parsed_property = make_page_property(property_name, property_type, property_content)
+        properties[property_name] = parsed_property
+      
+      res = create_new_page_in_db(headers=headers, database_id=output_database_id, cover=cover, icon=icon, properties=properties, children=children)
+      
+  # ↑
+  # |
+  # |
+  # |
+  # |
+  # ---------------------------------------------------------------------------------------------------------------------------
+  
+  
 
   # order property でソート順を指定
   payload = {

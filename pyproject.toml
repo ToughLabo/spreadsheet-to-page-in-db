@@ -18,6 +18,7 @@ main = {path = "spreadsheet_to_page_in_db"}
 markdown-it-py = "^3.0.0"
 mdit-py-plugins = "^0.4.2"
 linkify-it-py = "^2.0.3"
+chardet = "^5.2.0"
 
 
 [build-system]
