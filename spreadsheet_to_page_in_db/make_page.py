@@ -1,8 +1,5 @@
 import requests
-from dotenv import load_dotenv
-import os
 import json
-from notion_filter import create_filter
 from parse import inline_text_to_rich_text, parse_blocks
 
 # Block変数があるか否かを判定する関数。（TODO: rich_text の場合にのみ対応。ここでは text が BLOCK_NUM だけが入った rich_text か他の rich_text だと仮定する。）
@@ -241,7 +238,6 @@ def make_toggle_block(headers, toggle_block, df_row, BLOCK_VAR_BOX):
   }
   return complete_block
 
-
 # 未対応ブロックは一応 template_blocks を作成する時点で弾いている （ paragraph の場合だけ block のリストを返すことになるので boolean で区別する）
 def make_complete_block_for_template(headers, template_block, df_row, BLOCK_VAR_BOX):
   if template_block["type"] == "callout":
@@ -279,95 +275,34 @@ def make_page_property(property_type, property_content):
     raise ValueError(f"page property type: {property_type} は処理できません。")
 
 # 全てのページを削除する関数
-def delete_pages(output_database_id, headers, FILTERS_BOX) :
-  # filterの作成
-  parsed_filter = create_filter(output_database_id, headers, FILTERS_BOX)
-  # filter を通した DB への query
-  url = f"https://api.notion.com/v1/databases/{output_database_id}/query"
-  res = requests.post(url=url, headers=headers, json=parsed_filter)
-  if res.status_code != 200:
-    print("古いページの削除時に filter をかけた post request でエラーが発生しました。")
-    raise res.raise_for_status()
-  data_list = res.json()["results"]
-  for index, data in enumerate(data_list):
-    page_id = data["id"]
-    url = f"https://api.notion.com/v1/pages/{page_id}"
-    payload = {"arichived": True}
-    res = requests.patch(url=url, headers=headers, data=json.dumps(payload))
-    if res.status_code != 200:
-      print(f"ページを削除するときにエラーが発生しました。（ {index}個目のページ）")
-      res.raise_for_status()
-  return parsed_filter
-
-if __name__ == "__main__":
-  load_dotenv("config/.env")
-  NOTION_API_KEY = os.getenv("NOTION_API_KEY")
-  NOTION_VERSION = os.getenv("NOTION_VERSION")
-  test_database_id = os.getenv("NOTION_TEST_DATABASE_ID")
-  test_page_id = os.getenv("NOTION_TEST_PAGE_ID")
-  test_block_id = "180b95a4-c619-8117-a3ea-cb5f6ed30b24"
-  headers = {
-    "Authorization": f"Bearer {NOTION_API_KEY}",
-    "Notion-Version": NOTION_VERSION,
-    "Content-Type": "application/json"
-  }
-  # ブロック作成テスト
-  children = [
-    {
-      "object": "block", 
-      "type": "paragraph",
-      "paragraph":{
-        "rich_text": [
-          {
-            "type": "text",
-            "text": {
-              "content": "ここがタイトルになればいいな",
-              "link": None
-            }
-          }
-        ]
-      }
-    },
-    {
-      "type": "paragraph",
-      "paragraph": {
-        "rich_text": [
-          {
-            "type": "text",
-            "text": {
-              "content":"ここはこどもになればいいな",
-              "link": None
-            }
-          }
-        ]
+def delete_pages(output_database_id, headers, filter_order) :
+  for order in filter_order:
+    # filterの作成
+    query_filter = {
+      "filter": {
+        "property": "order",
+        "number": {
+          "equals": order
+        }
       }
     }
-  ]
-  
-  payload = {
-    "children":[{
-      "object": "block",
-      "type": "paragraph",
-      "paragraph": {
-        "rich_text":[
-          {
-            "type": "text",
-            "text": {
-              "content": "ここが一応親",
-              "link": None
-            }
-          }
-        ],
-        "color": "purple_background",
-        "children": children
-      },
-    }]
-  }
-  url = f"https://api.notion.com/v1/blocks/{test_page_id}/children"
-  # url = f"https://api.notion.com/v1/pages/{test_page_id}"
-  # url = f"https://api.notion.com/v1/blocks/{test_block_id}"
-  res = requests.patch(url=url,headers=headers, data=json.dumps(payload))
-  if res.status_code != 200:
-    raise res.raise_for_status()
-  else:
-    print(res.json())
+    # filter を通した DB への query
+    url = f"https://api.notion.com/v1/databases/{output_database_id}/query"
+    res = requests.post(url=url, headers=headers, json=query_filter)
+    if res.status_code != 200:
+      print("古いページの削除時（厳密には archive ）に filter をかけた post request でエラーが発生しました。")
+      raise res.raise_for_status()
+    data_list = res.json()["results"]
+    if data_list:
+      data = data_list[0]
+      page_id = data["id"]
+      url = f"https://api.notion.com/v1/pages/{page_id}"
+      payload = {"archived": True}
+      res = requests.patch(url=url, headers=headers, data=json.dumps(payload))
+      if res.status_code != 200:
+        print(f"ページを削除するとき（厳密には archive ）にエラーが発生しました。（ {order}個目のページ）")
+        res.raise_for_status()
+
+
+if __name__ == "__main__":
+  pass
