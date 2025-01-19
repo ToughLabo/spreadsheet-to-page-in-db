@@ -5,3 +5,4 @@ build
 main.egg-info
 csv
 old
+dist

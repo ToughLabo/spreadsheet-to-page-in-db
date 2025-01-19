@@ -1,12 +1,10 @@
-
 [tool.poetry]
-name = "spreadsheet-to-page-in-db"
+name = "spreadsheet_to_page_in_db"
 version = "0.1.0"
 description = "スプレッドシートからテンプレート通りに Notion Page を作成するためのコード"
 authors = ["KentaroKajiyama <kemushi555@icloud.com>"]
 readme = "README.md"
 
-# 依存関係
 [tool.poetry.dependencies]
 python = "^3.10"
 requests = "^2.32.3"
@@ -14,7 +12,6 @@ python-dotenv = "^1.0.1"
 pandas = "^2.2.3"
 rich = "^13.9.4"
 setuptools = "^75.8.0"
-main = {path = "spreadsheet_to_page_in_db"}
 markdown-it-py = "^3.0.0"
 mdit-py-plugins = "^0.4.2"
 linkify-it-py = "^2.0.3"
@@ -25,7 +22,5 @@ chardet = "^5.2.0"
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
-# エントリーポイント
-[tool.poetry.scripts]
-spreadsheet-notion = "spreadsheet_to_page_in_db.main:main"
+
 
