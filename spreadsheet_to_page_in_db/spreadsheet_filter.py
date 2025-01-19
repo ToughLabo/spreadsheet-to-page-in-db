@@ -152,12 +152,12 @@ def translate_to_query(expression: str, column: str) -> str:
   raise ValueError(f' {expression} は無効な filter 条件です。')
 
 # DataFrame(original) -> DataFrame(filtered)
-def filter_dataframe(df_original, filters_box):
+def create_spreadsheet_filter(df_original, filters_box):
   df_filtered = df_original
-  for filter in filters_box:
-    if filter["type"] == "Column":
-      expression = filter["expression"]
-      column = filter["name"]
+  for filter_element in filters_box:
+    if filter_element["type"] == "Column":
+      expression = filter_element["expression"]
+      column = filter_element["name"]
       query = translate_to_query(expression=expression, column=column)
       df_filtered = df_filtered.query(query)
   return df_filtered

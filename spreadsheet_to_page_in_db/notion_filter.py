@@ -248,11 +248,11 @@ def fetch_property_type(output_database_id, headers):
   return property_dict
 
 # FILTERS_BOX -> Notion DB Query Filter Object
-def create_filter(output_database_id, headers, filters_box):
+def create_notion_filter(output_database_id, headers, filters_box):
   parsed_filters = []
   property_dict = fetch_property_type(output_database_id, headers)
   for f in filters_box:
-    if f["type"] == "property":
+    if f["type"] == "Property":
       expression = f["expression"]
       column = f["name"]
       property_type = property_dict[f["name"]]
