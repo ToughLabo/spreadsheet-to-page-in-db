@@ -54,7 +54,7 @@ def create_block_var_and_column_name(database_id, headers):
   return result_dict 
 
 # cover & icon から環境変数を作成 ( preperty_name, property_type, property_content(対応する列の内容が入っている) を key にした dict の list)
-def create_property_and_column(template_database_id, output_database_id, headers, df_row):
+def create_property_and_column(template_database_id, output_database_id, headers):
   # まずは database から内容を取得
   url = f"https://api.notion.com/v1/databases/{template_database_id}/query"
   payload = {}
@@ -71,14 +71,18 @@ def create_property_and_column(template_database_id, output_database_id, headers
   if res.status_code != 200:
     print("output database の property の type を取得する際にエラーが発生しました。")
     res.raise_for_status()
-  output_db_properties = res.json()["results"]["properties"]
+  output_db_properties = res.json()["properties"]
+  is_order_flag = False
   for variable_pair in variable_pairs:
     property_name = variable_pair["properties"]["Property name"]["rich_text"][0]["text"]["content"]
     column_name = variable_pair["properties"]["Column name"]["title"][0]["text"]["content"]
+    if column_name == "order":
+      is_order_flag = True
     # property の type を取得する
     property_type = output_db_properties[property_name]["type"]
-    property_content = df_row[column_name]
-    property_and_column_list.append({"column_name": column_name, "property_name": property_name, "property_type": property_type, "property_content": property_content})
+    property_and_column_list.append({"column_name": column_name, "property_name": property_name, "property_type": property_type})
+  if not is_order_flag:
+    property_and_column_list.append({"column_name": "order", "property_name": "order", "property_type": "number"})
   return property_and_column_list
 
 # Filters を作成 ( key は common, notion,spreadsheet, value は filtered order list)
