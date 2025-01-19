@@ -16,6 +16,7 @@ markdown-it-py = "^3.0.0"
 mdit-py-plugins = "^0.4.2"
 linkify-it-py = "^2.0.3"
 chardet = "^5.2.0"
+pytest = "^8.3.4"
 
 
 [build-system]
