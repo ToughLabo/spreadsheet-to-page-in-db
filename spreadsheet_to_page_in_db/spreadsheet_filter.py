@@ -31,74 +31,92 @@ def parse_value(token: str):
 
 # 'not in [xx, yy]' → '~col.isin([xx, yy])'
 #   という形に直すための置換。([^\]]+) は ']' でない文字の繰り返し
-def parse_not_in(expression: str, column) -> str:
-  expression = re.sub(
-    rf'not\s+in\s*\[\s*([^\]]+)\s*\]',
-    lambda m: f'{parse_value(column)} not in [{parse_value(m.group(1))}]',
-    expression
-  )
-  return expression
+def parse_not_in(expression: str, column: str) -> str:
+  pattern = r'not\s+in\s*\[\s*([^\]]+)\s*\]'
+  m = re.match(pattern, expression.strip())
+  if not m:
+    raise ValueError(f"Invalid 'not in' expression: {expression}")
+
+  elements = [parse_value(s.strip()) for s in m.group(1).split(",")]
+  return f"{column} not in {elements}"
 
 # 'in [xx, yy]' → 'col.isin([xx, yy])'
-def parse_in(expression: str, column) -> str:
-  expression = re.sub(
-    rf'in\s*\[\s*([^\]]+)\s*\]',
-    lambda m: f'{parse_value(column)} in [{parse_value(m.group(1))}]',
-    expression
-  )
-  return expression
+def parse_in(expression: str, column: str) -> str:
+  pattern = r'in\s*\[\s*([^\]]+)\s*\]'
+  m = re.match(pattern, expression.strip())
+  if not m:
+    raise ValueError(f"Invalid 'in' expression: {expression}")
+
+  elements = [parse_value(s.strip()) for s in m.group(1).split(",")]
+  return f"{column} in {elements}"
 
 # '>= or > or <= or <'
 def parse_inequality(expression:str, column) -> str:
-  expression = expression.replace('≥', '>=')
-  expression = expression.replace('＞＝', '>=')
-  expression = expression.replace('≤', '<=')
-  expression = expression.replace('＜＝', '<=')
-  expression = expression.replace('＞', '>')
-  expression = expression.replace('＜', '<')
-  return f'{parse_value(column)} {expression}'
+  expression = re.sub(r'≥', '>=', expression)  # ≥ → >=
+  expression = re.sub(r'≤', '<=', expression)  # ≤ → <=
+  expression = re.sub(r'＞＝', '>=', expression)  # ＞＝ → >=
+  expression = re.sub(r'＜＝', '<=', expression)  # ＜＝ → <=
+  expression = re.sub(r'＞', '>', expression)  # ＞ → >
+  expression = re.sub(r'＜', '<', expression)  # ＜ → <
+  
+  # 演算子と数値の間に確実にスペースを入れる
+  expression = re.sub(r'(>=|<=|>|<)\s*', r' \1 ', expression).strip()
+
+  return f'{column} {expression}'
 
 # 'not xx'
-def parse_not_equal(expression:str, column) -> str:
-  expression = re.sub(
-    rf'not\s+(\S+)',
-    lambda m: f'{parse_value(column)} != {parse_value(m.group(1))}',
-    expression
-  )
-  return expression
+def parse_not_equal(expression: str, column: str) -> str:
+  pattern = r'not\s+(.+)'
+  m = re.match(pattern, expression.strip())
+  if not m:
+    raise ValueError(f"Invalid 'not' expression: {expression}")
+
+  return f"{column} != {parse_value(m.group(1).strip())}"
+
 
 # ' == xx'
-def parse_equal(expression:str, column) -> str:
-  expression = re.sub(
-    rf'=\s+(\S+)',
-    lambda m: f'{parse_value(column)} == {parse_value(m.group(1))}',
-    expression
-  )
-  return expression
+def parse_equal(expression: str, column: str) -> str:
+  pattern = r'=\s+(.+)'
+  m = re.match(pattern, expression.strip())
+  if not m:
+    raise ValueError(f"Invalid '=' expression: {expression}")
+
+  return f"{column} == {parse_value(m.group(1).strip())}"
+
 
 # ' xx or yy '
-def parse_or(expression:str, column) -> str:
-  pattern_or = rf'(\S+)\s+or\s+(\S+)'
-  # キャプチャした2つを両方 col==... に変換して '|' でつなぐ
-  expression = re.sub(
-    pattern_or,
-    lambda m: f'{parse_value(column)} == {parse_value(m.group(1))} | {parse_value(column)} == {parse_value(m.group(2))}',
-    expression
-  )
-  return expression
+def parse_or(expression: str, column: str) -> str:
+  pattern = r'(.+)\s+or\s+(.+)'
+  m = re.match(pattern, expression.strip())
+  if not m:
+    raise ValueError(f"Invalid 'or' expression: {expression}")
+
+  left, right = parse_value(m.group(1).strip()), parse_value(m.group(2).strip())
+
+  # 文字列ならシングルクォートで囲む
+  left = f"'{left}'" if isinstance(left, str) else left
+  right = f"'{right}'" if isinstance(right, str) else right
+
+  return f"({column} == {left}) | ({column} == {right})"
+
+
 
 # 例: 'col like \'ABC\''
 #     'col not like \'ABC\''
-def parse_like(expression:str, column) -> str:
-  pattern = rf'^\s*(not\s+)?like\s+"([^"]+)"$'
-  m = re.match(pattern, expression)
-  not_like_part = m.group(1)      # 'not ' or None
-  like_target = parse_value(m.group(2))        # 'ABC'
-  
-  if not_like_part:
-    return f'~{parse_value(column)}.str.contains({like_target})'
+def parse_like(expression: str, column: str) -> str:
+  pattern = r'^\s*(not\s+)?like\s+"([^"]+)"$'
+  m = re.match(pattern, expression.strip())
+  if not m:
+    raise ValueError(f"Invalid 'like' expression: {expression}")
+
+  not_like = m.group(1) is not None
+  like_target = m.group(2)
+
+  if not_like:
+    return f"~{column}.str.contains(\"{like_target}\")"
   else:
-    return f'{parse_value(column)}.str.contains({like_target})'
+    return f"{column}.str.contains(\"{like_target}\")"
+
 
 # Notion -> df.query
 def translate_to_query(expression: str, column: str) -> str:
