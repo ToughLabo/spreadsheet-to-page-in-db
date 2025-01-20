@@ -15,7 +15,7 @@ def test_parse_not_in():
   expression = "not in [10, 20, \"abc\"]"
   result = parse_not_in(expression, "TestProperty", "number")
   expected = {
-    "or": [
+    "and": [
       {"property": "TestProperty", "number": {"does_not_equal": 10}},
       {"property": "TestProperty", "number": {"does_not_equal": 20}},
       {"property": "TestProperty", "number": {"does_not_equal": "abc"}},
@@ -68,12 +68,15 @@ def test_parse_not_equal():
   assert result == expected
 
 # === parse_equal のテスト ===
-def test_parse_equal():
-  expression = "= 123"
-  result = parse_equal(expression, "TestProperty", "number")
+@pytest.mark.parametrize("expression, expected_key, expected_value",[
+  ("= 123", "number", 123),
+  ("= \"Not started\"", "select", "Not started")
+])
+def test_parse_equal(expression, expected_key, expected_value):
+  result = parse_equal(expression, "TestProperty", expected_key)
   expected = {
     "property": "TestProperty",
-    "number": {"equals": 123}
+    expected_key: {"equals": expected_value}
   }
   assert result == expected
 
