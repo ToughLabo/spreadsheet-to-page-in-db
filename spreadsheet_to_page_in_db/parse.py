@@ -15,6 +15,8 @@ def inline_text_to_rich_text(inline_text: str, is_bold=False, is_italic=False, i
   # parser の初期化
   md = MarkdownIt("gfm-like").use(dollarmath_plugin, allow_space=True, double_inline=True)
   tokens = md.parse(inline_text)
+  # 空文字を取り除く
+  tokens = [token for token in tokens[1].children if not (token.type == "text" and token.content == "")]
   # rich_text を格納する
   rich_text_array = []
   # annotation
@@ -24,7 +26,7 @@ def inline_text_to_rich_text(inline_text: str, is_bold=False, is_italic=False, i
   underline = is_underline
   link_url = None
   # parser の仕様上必ず 1 paragraph として処理されることに注意。
-  for token in tokens[1].children:
+  for token in tokens:
     if token.type == "s_open":
       strikethrough = True
       continue
@@ -60,9 +62,7 @@ def inline_text_to_rich_text(inline_text: str, is_bold=False, is_italic=False, i
           "strikethrough": False,
           "code": True,
           "color": "default"
-        },
-        "plain_text": content,
-        "href": None
+        }
       })
       continue
     if token.type == "math_inline" or token.type == "math_inline_double":
@@ -78,9 +78,7 @@ def inline_text_to_rich_text(inline_text: str, is_bold=False, is_italic=False, i
           "strikethrough": strikethrough,
           "code": False,
           "color": "default"
-        },
-        "plain_text": content,
-        "href": link_url
+        }
       })
       continue
     if token.type == "text":
@@ -100,9 +98,7 @@ def inline_text_to_rich_text(inline_text: str, is_bold=False, is_italic=False, i
           "strikethrough": strikethrough,
           "code": False,
           "color": "default"
-        },
-        "plain_text": content,
-        "href": link_url
+        }
       })
 
   return rich_text_array
@@ -124,10 +120,10 @@ def parse_heading(tokens, index, is_bold=False, is_italic=False, is_underline=Fa
   block = {
         "type": f"heading_{level}",
         f"heading_{level}": {
-          "rich_text": inline_text_to_rich_text(heading_text, is_bold, is_italic, is_underline, is_strikethrough)
-        },
-        "color": "default",
-        "is_toggleable": False
+          "rich_text": inline_text_to_rich_text(heading_text, is_bold, is_italic, is_underline, is_strikethrough),
+          "color": "default",
+          "is_toggleable": False
+        }
       }
   index += 1
   return block, index
@@ -170,23 +166,23 @@ def parse_blockquote(tokens, index, is_bold=False, is_italic=False, is_underline
     block = {
       "type": "callout",
       "callout":{
-        "rich_text": inline_text_to_rich_text(match.group(2), is_bold, is_italic, is_underline, is_strikethrough)
-      },
-      "icon": {
+        "rich_text": inline_text_to_rich_text(match.group(2), is_bold, is_italic, is_underline, is_strikethrough),
+        "icon": {
         "emoji": match.group(1)
+        },
+        "color": "default",
+        "children": children
       },
-      "color": "default",
-      "children": children
     }
   else:
     # Quote
     block = {
       "type": "quote",
       "quote": {
-        "rich_text": inline_text_to_rich_text(p_text, is_bold, is_italic, is_underline, is_strikethrough)
-      },
-      "color": "default",
-      "children": children
+        "rich_text": inline_text_to_rich_text(p_text, is_bold, is_italic, is_underline, is_strikethrough),
+        "color": "default",
+        "children": children
+      }
     }
   index += 1
   return block, index
@@ -214,10 +210,9 @@ def parse_list_item(tokens, index, type, is_bold=False, is_italic=False, is_unde
   block = {
     "type": type,
     type :{
-      "rich_text": inline_text_to_rich_text(list_text, is_bold, is_italic, is_underline, is_strikethrough)
-    },
-    "color": "default",
-    "children": children
+      "rich_text": inline_text_to_rich_text(list_text, is_bold, is_italic, is_underline, is_strikethrough),
+      "children": children
+    }
   }
   index += 1
   return block, index
@@ -302,13 +297,7 @@ def parse_table(tokens, index, is_bold=False, is_italic=False, is_underline=Fals
   # 各行の処理
   if has_column_header:
     for cell in header:
-      cells.append({
-        "type": "text",
-        "text": {
-          "content": cell,
-          "link": None
-        }
-      })
+      cells.append(cell)
     table_rows.append({
     "type": "table_row",
     "table_row": {
@@ -318,15 +307,7 @@ def parse_table(tokens, index, is_bold=False, is_italic=False, is_underline=Fals
   cells = []
   for row in rows:
     for cell in row:
-      cells.append({
-        "type": "text",
-        "text": {
-          "content": cell,
-          "link": None
-        },
-        "plain_text": cell,
-        "href": None
-      })
+      cells.append(cell)
     table_rows.append({
       "type": "table_row",
       "table_row": {
@@ -352,12 +333,11 @@ def parse_image(tokens, index) -> dict[str,Any]:
 
 # equation block を parse
 def parse_equation(tokens, index) -> dict[str,Any]:
-  index += 1
   expression = tokens[index] 
   block = {
     "type": "equation",
     "equation": {
-      "expression": expression
+      "expression": expression.content
     }
   }
   index += 1
@@ -375,9 +355,9 @@ def parse_paragraph(tokens, index, is_bold=False, is_italic=False, is_underline=
   block = {
     "type": "paragraph",
     "paragraph": {
-      "rich_text": inline_text_to_rich_text(paragraph_text, is_bold, is_italic, is_underline, is_strikethrough)
-    },
-    "color": "default"
+      "rich_text": inline_text_to_rich_text(paragraph_text, is_bold, is_italic, is_underline, is_strikethrough),
+      "color": "default"
+    }
   }
   index += 1
   return block, index
