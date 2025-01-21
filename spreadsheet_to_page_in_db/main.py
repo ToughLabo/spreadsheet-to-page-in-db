@@ -6,11 +6,11 @@ import numpy as np
 from rich.progress import track
 from io import StringIO
 import chardet
-from spreadsheet_to_page_in_db.pre_process import extract_uuid_from_notion_url
-from spreadsheet_to_page_in_db.make_page import make_complete_block_for_template, delete_pages, make_page_property
-from spreadsheet_to_page_in_db.variables import create_cover_and_icons, create_block_var_and_column_name, create_property_and_column, create_property_or_column_filter
-from spreadsheet_to_page_in_db.notion_api import create_new_page_in_db
-from spreadsheet_to_page_in_db.pre_process import pre_process_csv
+from pre_process import extract_uuid_from_notion_url
+from make_page import make_complete_block_for_template, delete_pages, make_page_property
+from variables import create_cover_and_icons, create_block_var_and_column_name, create_property_and_column, create_property_or_column_filter
+from notion_api import create_new_page_in_db
+from pre_process import pre_process_csv
 
 
 def main(INDEX=0, df_DICT=None):

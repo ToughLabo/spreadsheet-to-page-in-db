@@ -1,7 +1,7 @@
 import requests
 import json
 import re
-from spreadsheet_to_page_in_db.parse import inline_text_to_rich_text, parse_blocks
+from parse import inline_text_to_rich_text, parse_blocks
 
 
 # Block変数があるか否かを判定する関数。（TODO: rich_text の場合にのみ対応。ここでは text が BLOCK_NUM だけが入った rich_text か他の rich_text だと仮定する。）
