@@ -1,6 +1,4 @@
 import re
-from dotenv import load_dotenv
-import os
 
 def parse_value(token: str):
   """
@@ -254,13 +252,4 @@ def create_notion_filter(filters_box):
 
 # --- テスト用 ---
 if __name__ == "__main__":
-  load_dotenv("config/.env")
-  NOTION_API_KEY = os.getenv("NOTION_API_KEY")
-  NOTION_VERSION = os.getenv("NOTION_VERSION")
-  TEMPLATE_BOX_DATABASE_ID = os.getenv("NOTION_TEMPLATE_BOX_DATABASE_ID")
-  headers = {
-    "Authorization": f"Bearer {NOTION_API_KEY}",
-    "Notion-Version": NOTION_VERSION,
-    "Content-Type": "application/json"
-  }
-  test_output_database_id = os.getenv("NOTION_TEST_TARGET_DATABASE_ID")
+  pass
