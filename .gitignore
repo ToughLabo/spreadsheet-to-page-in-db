@@ -6,3 +6,4 @@ main.egg-info
 csv
 old
 dist
+.pytest_cache
