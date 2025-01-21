@@ -2,7 +2,7 @@ import requests
 import json
 
 # DB に新しいページを作成する。
-def create_new_page_in_db(headers, database_id, icon, cover, properties, children, index=None):
+def create_new_page_in_db(headers, database_id, icon, cover, properties, children, order, delete_order_index):
   url = "https://api.notion.com/v1/pages"
   parent = {"database_id": database_id}
   payload = {
@@ -14,12 +14,32 @@ def create_new_page_in_db(headers, database_id, icon, cover, properties, childre
   }
   res = requests.post(url=url, headers=headers, json=payload)
   if res.status_code != 200:
-    if index:
-      print(f"ページを作成する際にエラーが発生しました。index = {index}")
+    if order:
+      print(f"ページを作成する際にエラーが発生しました。order = {order}")
     else:
       print(f"ページを作成する際にエラーが発生しました。")
+    # 元のページを復活させてエラーを吐く
+    if order in delete_order_index:
+      page_id = delete_order_index[order]
+      url = f"https://api.notion.com/v1/pages/{page_id}"
+      payload = {
+        "archived": False,
+        "properties":
+          {
+            "Status": {
+              "status": {
+                "name": "エラー"
+              }
+            }
+          }
+      }
+      res = requests.patch(url=url, headers=headers, json=payload)
+      if res.status_code != 200:
+        print(order)
+        print("元のページを復活させてエラーを吐かせる時にエラーが発生しました。")
+        res.raise_for_status()
     res.raise_for_status()
-  return res.json()
+  return order
 
 # 既存のページに追加する。
 def append_contents(headers, page_id, blocks):
@@ -52,12 +72,11 @@ def fetch_all_pages(headers, url, payload):
   payload["page_size"] = 100
   
   while True:
-    response = requests.post(url, headers=headers, data=json.dumps(payload))
-    if response.status_code != 200:
-      print(f"status_code:{response.status_code}")
-      print(f"error message:{response.text}")
-      exit()
-    response_data = response.json()
+    res = res.post(url, headers=headers, data=json.dumps(payload))
+    if res.status_code != 200:
+      print("database の page を fetch する時にエラーが発生しました。")
+      res.raise_for_status()
+    response_data = res.json()
     all_pages.extend(response_data.get("results", []))
     
     if not response_data.get("has_more"):
