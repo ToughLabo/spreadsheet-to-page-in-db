@@ -1,6 +1,6 @@
 import requests
-from notion_filter import create_notion_filter
-from spreadsheet_filter import create_spreadsheet_filter
+from spreadsheet_to_page_in_db.notion_filter import create_notion_filter
+from spreadsheet_to_page_in_db.spreadsheet_filter import create_spreadsheet_filter
 
 # cover & icon から環境変数を作成 ( cover or icon が key, column name が value)
 def create_cover_and_icons(database_id, headers):

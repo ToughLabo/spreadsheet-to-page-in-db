@@ -6,19 +6,23 @@ import numpy as np
 from rich.progress import track
 from io import StringIO
 import chardet
-from pre_process import extract_uuid_from_notion_url
-from make_page import make_complete_block_for_template, delete_pages, make_page_property
-from variables import create_cover_and_icons, create_block_var_and_column_name, create_property_and_column, create_property_or_column_filter
-from notion_api import create_new_page_in_db
-from pre_process import pre_process_csv
+import sys
+print(sys.path)
+from spreadsheet_to_page_in_db.pre_process import extract_uuid_from_notion_url, pre_process_csv
+from spreadsheet_to_page_in_db.make_page import make_complete_block_for_template, delete_pages, make_page_property
+from spreadsheet_to_page_in_db.variables import create_cover_and_icons, create_block_var_and_column_name, create_property_and_column, create_property_or_column_filter
+from spreadsheet_to_page_in_db.notion_api import create_new_page_in_db
 
 
-def main(INDEX=0, df_DICT=None):
+def main():
+  print(f"OK!")
+  exit()
   # 環境変数の設定
   load_dotenv("./config/.env")
   NOTION_API_KEY = os.getenv("NOTION_API_KEY")
   NOTION_VERSION = os.getenv("NOTION_VERSION")
   TEMPLATE_BOX_DATABASE_ID = os.getenv("NOTION_TEMPLATE_BOX_DATABASE_ID")
+  INDEX = os.getenv("INDEX")
   
   # 認証情報の設定
   headers = {
@@ -71,6 +75,7 @@ def main(INDEX=0, df_DICT=None):
     
     # 実行 Status を 実行待機中 -> 実行中へ変更
     template_page_id = template_page_properties_json["id"]
+    template_page_name = template_page_properties_json["properties"]["Name"]["title"][0]["text"]["content"]
     url = f"https://api.notion.com/v1/pages/{template_page_id}"
     data = {
       "properties":
@@ -295,7 +300,7 @@ def main(INDEX=0, df_DICT=None):
     FILTERS_BOX["notion"] = delete_pages(output_database_id=output_database_id, headers=headers, filtered_order=FILTERS_BOX["common"])
     
     # 各ページの作成
-    for row in track(zip(*[df[col] for col in df.columns]), description="Creating Pages..."):
+    for row in track(zip(*[df[col] for col in df.columns]), description=f"Creating Pages Now for Template (Name: {template_page_name})", total=len(df)):
       # 各列の spreadsheet のデータ
       df_row = dict(zip(df.columns, row))
       # cover の処理
