@@ -1,9 +1,6 @@
 import pytest
 import json
 from unittest.mock import patch, MagicMock
-
-# テスト対象の関数をインポート
-# （提示されたコードを spreadsheet_to_page_in_db.make_page.py にまとめてある前提）
 from spreadsheet_to_page_in_db.make_page import (
   is_block_var,
   make_callout_block,

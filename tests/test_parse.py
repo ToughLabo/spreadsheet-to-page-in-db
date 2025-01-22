@@ -1,4 +1,3 @@
-# test_parser.py
 import pytest
 from spreadsheet_to_page_in_db.parse import (
   inline_text_to_rich_text,

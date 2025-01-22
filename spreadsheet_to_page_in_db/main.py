@@ -6,30 +6,37 @@ import numpy as np
 from rich.progress import track
 from io import StringIO
 import chardet
-import sys
-print(sys.path)
 from spreadsheet_to_page_in_db.pre_process import extract_uuid_from_notion_url, pre_process_csv
 from spreadsheet_to_page_in_db.make_page import make_complete_block_for_template, delete_pages, make_page_property
 from spreadsheet_to_page_in_db.variables import create_cover_and_icons, create_block_var_and_column_name, create_property_and_column, create_property_or_column_filter
 from spreadsheet_to_page_in_db.notion_api import create_new_page_in_db
-
+import sys
 
 def main():
-  print(f"OK!")
-  exit()
   # 環境変数の設定
   load_dotenv("./config/.env")
   NOTION_API_KEY = os.getenv("NOTION_API_KEY")
   NOTION_VERSION = os.getenv("NOTION_VERSION")
   TEMPLATE_BOX_DATABASE_ID = os.getenv("NOTION_TEMPLATE_BOX_DATABASE_ID")
-  INDEX = os.getenv("INDEX")
-  
+  INDEX = int(os.getenv("INDEX"))
   # 認証情報の設定
   headers = {
     "Authorization": f"Bearer {NOTION_API_KEY}",
     "Notion-Version": NOTION_VERSION,
     "Content-Type": "application/json"
   }
+  
+  # 引数の読み込み。
+  args = sys.argv[1:]  # TEMPLATE_ID, CSVファイルのペアを取得
+  if len(args) % 2 != 0:
+    raise ValueError("❌ 引数の数が正しくありません")
+  
+  df_DICT = {}
+  for i in range(0, len(args), 2):
+    template_id = args[i]
+    csv_path = args[i+1]
+    df = pd.read_csv(csv_path)
+    df_DICT[template_id] = df
   
   # delete flag（scrap and build か否か）TODO: 後でdeleteしないパターンについても考えてみる。
   # delete_flag = True
