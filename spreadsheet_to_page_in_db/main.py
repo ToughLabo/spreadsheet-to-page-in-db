@@ -9,7 +9,7 @@ import chardet
 from spreadsheet_to_page_in_db.pre_process import extract_uuid_from_notion_url, pre_process_csv
 from spreadsheet_to_page_in_db.make_page import make_complete_block_for_template, delete_pages, make_page_property
 from spreadsheet_to_page_in_db.variables import create_cover_and_icons, create_block_var_and_column_name, create_property_and_column, create_property_or_column_filter
-from spreadsheet_to_page_in_db.notion_api import create_new_page_in_db
+from spreadsheet_to_page_in_db.notion_api import create_new_page_in_db, update_notion_status_to_error, update_notion_status_to_inprogress, update_notion_status_to_ready
 import sys
 
 def main():
@@ -54,50 +54,22 @@ def main():
   url = f"https://api.notion.com/v1/databases/{TEMPLATE_BOX_DATABASE_ID}/query"
   res = requests.post(url=url, headers=headers, json=filter_for_template_box)
   if res.status_code != 200:
-    print("Template Box から テンプレートのデータを取得する際にエラーが発生しました。")
-    res.raise_for_status()
+    error_message = "Template Box から テンプレートのデータを取得する際にエラーが発生しました。"
+    update_notion_status_to_error(template_id=template_page_id, error_message=error_message, headers=headers)
   template_jsons = res.json()["results"]
   
   # 実行 Status を 実行予約 -> 実行待機中 にまとめて変更
   for template in template_jsons:
     template_page_id = template["id"]
-    url = f"https://api.notion.com/v1/pages/{template_page_id}"
-    data = {
-      "properties":
-        {
-          "Status": {
-            "status": {
-              "name": "実行待機中"
-            }
-          }
-        }
-    }
-    res = requests.patch(url=url, headers=headers, json=data)
-    if res.status_code != 200:
-      print("Template Box から テンプレートのデータを取得する際にエラーが発生しました。")
-      res.raise_for_status()
+    update_notion_status_to_ready(template_id=template_page_id, headers=headers)
   
   # 各テンプレートからのページ作成を実行
   for index, template_page_properties_json in enumerate(template_jsons):
-    
-    # 実行 Status を 実行待機中 -> 実行中へ変更
+    # テンプレページの id と name を取得する。
     template_page_id = template_page_properties_json["id"]
     template_page_name = template_page_properties_json["properties"]["Name"]["title"][0]["text"]["content"]
-    url = f"https://api.notion.com/v1/pages/{template_page_id}"
-    data = {
-      "properties":
-        {
-          "Status": {
-            "status": {
-              "name": "実行中"
-            }
-          }
-        }
-    }
-    res = requests.patch(url=url, headers=headers, json=data)
-    if res.status_code != 200:
-      print(f"実行待機中から実行中に変更する際にエラーが発生しました。({index+1}番目) ")
-      res.raise_for_status()
+    # ステータスを実行中に変更
+    update_notion_status_to_inprogress(template_id=template_page_id, headers=headers)
     
     # Page Property などの取得
     # 出力先のデータベースの ID の取得
@@ -126,23 +98,8 @@ def main():
         df = pd.read_csv(StringIO(csv_data.decode(encoding_detected)))
         df = df.fillna('')
       else:
-        url = f"https://api.notion.com/v1/pages/{template_page_id}"
-        data = {
-          "properties":
-            {
-              "Status": {
-                "status": {
-                  "name": "エラー"
-                }
-              }
-            }
-        }
-        res = requests.patch(url=url, headers=headers, json=data)
-        if res.status_code != 200:
-          print(f"実行中からエラーに変更する際にエラーが発生しました。(csv file ({index+1}番目) を取得する際にエラーが発生しました。) ")
-          res.raise_for_status()
-        print(f"csv file ({index+1}番目) を取得する際にエラーが発生しました。")
-        res.raise_for_status()
+        error_message = f"csv file ({index+1}番目) を取得する際にエラーが発生しました。"
+        update_notion_status_to_error(template_id=template_page_id, error_message=error_message, headers=headers)
     # Notion に csv が登録されておらず、Colab からデータを取得する場合。
     else:
       template_id = template_page_properties_json["properties"]["Template ID"]["unique_id"]["number"]
@@ -152,22 +109,8 @@ def main():
       elif id_number in df_DICT:
         df = df_DICT[id_number]
       else:
-        url = f"https://api.notion.com/v1/pages/{template_page_id}"
-        data = {
-          "properties":
-            {
-              "Status": {
-                "status": {
-                  "name": "エラー"
-                }
-              }
-            }
-        }
-        res = requests.patch(url=url, headers=headers, json=data)
-        if res.status_code != 200:
-          print(f"実行中からエラーに変更する際にエラーが発生しました。(Google Colaboratory に入力した TEMPLATE_ID が不適切です。) ")
-          res.raise_for_status()
-        raise ValueError("Google Colaboratory に入力した TEMPLATE_ID が不適切です。")
+        error_message = "(Google Colaboratory に入力した TEMPLATE_ID が不適切です。)"
+        update_notion_status_to_error(template_id=template_page_id, error_message=error_message, headers=headers)
     
     # csv の前処理フラグ
     pre_process = template_page_properties_json["properties"]["前処理"]["select"]["name"]
@@ -176,23 +119,8 @@ def main():
     url = f"https://api.notion.com/v1/blocks/{template_page_id}/children"
     res = requests.get(url=url, headers=headers)
     if res.status_code != 200:
-      url = f"https://api.notion.com/v1/pages/{template_page_id}"
-      data = {
-        "properties":
-          {
-            "Status": {
-              "status": {
-                "name": "エラー"
-              }
-            }
-          }
-      }
-      res = requests.patch(url=url, headers=headers, json=data)
-      if res.status_code != 200:
-        print(f"実行中からエラーに変更する際にエラーが発生しました。(Template page ({index+1}番目) の内容を取得する際にエラーが発生しました。) ")
-        res.raise_for_status()
-      print(f"Template page ({index+1}番目) の内容を取得する際にエラーが発生しました。")
-      res.raise_for_status()
+      error_message = f"Template page ({index+1}番目) の内容を取得する際にエラーが発生しました。"
+      update_notion_status_to_error(template_id=template_page_id, error_message=error_message, headers=headers)
     template_blocks = res.json()["results"]
     if pre_process != "なし":
       for template_block in template_blocks:
@@ -220,8 +148,8 @@ def main():
     url = f"https://api.notion.com/v1/databases/{output_database_id}"
     res = requests.get(url=url, headers=headers)
     if res.status_code != 200:
-      print(f"output database properties を取得する際にエラーが発生しました。")
-      res.raise_for_status()
+      error_message = "output database properties を取得する際にエラーが発生しました。"
+      update_notion_status_to_error(template_id=template_page_id, error_message=error_message, headers=headers)
     properties = res.json()["properties"]
     PROPERTY_NAME_TYPE_BOX = {}
     PROPERTY_SELECT_BOX = {}
@@ -356,24 +284,8 @@ def main():
       }
       res = requests.patch(url=url, headers=headers, json=data)
       if res.status_code != 200:
-        url = f"https://api.notion.com/v1/pages/{template_page_id}"
-        data = {
-          "properties":
-            {
-              "Status": {
-                "status": {
-                  "name": "エラー"
-                }
-              }
-            }
-        }
-        res = requests.patch(url=url, headers=headers, json=data)
-        if res.status_code != 200:
-          print(f"実行中からエラーに変更する際にエラーが発生しました。(Last INDEX を更新する際にエラーが発生しました。(INDEX: {INDEX})) ")
-          res.raise_for_status()
-        print(f"Last INDEX を更新する際にエラーが発生しました。(INDEX: {INDEX}) ")
-        res.raise_for_status()
-      
+        error_message = f"Last INDEX を更新する際にエラーが発生しました。(INDEX: {INDEX}) "
+        update_notion_status_to_error(template_id=template_page_id, error_message=error_message, headers=headers)
     
     # 実行 Status を 実行中 -> 完了へ変更
     url = f"https://api.notion.com/v1/pages/{template_page_id}"
@@ -389,9 +301,8 @@ def main():
     }
     res = requests.patch(url=url, headers=headers, json=data)
     if res.status_code != 200:
-      print(f"実行中から完了に変更する際にエラーが発生しました。({index+1}番目) ")
-      res.raise_for_status()
-    
+      error_message = f"実行中から完了に変更する際にエラーが発生しました。({index+1}番目) "
+      update_notion_status_to_error(template_id=template_page_id, error_message=error_message, headers=headers)
 
 if __name__ == "__main__":
   main()

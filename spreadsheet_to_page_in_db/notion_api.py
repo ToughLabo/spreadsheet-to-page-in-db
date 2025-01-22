@@ -87,3 +87,65 @@ def fetch_all_pages(headers, url, payload):
   
   return all_pages
 
+def update_notion_status_to_error(template_id: str, error_message: str, headers: dict):
+  """
+  NotionのページのStatusプロパティを「エラー」に更新する関数
+
+  Args:
+    template_id (str): NotionのページID
+    error_message (str): エラーメッセージ (例: "csv file (3番目) を取得する際にエラーが発生しました。")
+    headers (dict): Notion APIの認証ヘッダー
+  """
+  url = f"https://api.notion.com/v1/pages/{template_id}"
+  data = {
+    "properties": {
+      "Status": {
+        "status": {
+          "name": "エラー"
+        }
+      }
+    }
+  }
+  
+  res = requests.patch(url=url, headers=headers, json=data)
+  
+  if res.status_code != 200:
+    print(f"実行中からエラーに変更する際にエラーが発生しました。({error_message})")
+    res.raise_for_status()
+  else:
+    print({error_message})
+    res.raise_for_status()
+
+def update_notion_status_to_ready(template_id: str, headers: dict):
+  url = f"https://api.notion.com/v1/pages/{template_id}"
+  data = {
+    "properties":
+      {
+        "Status": {
+          "status": {
+            "name": "実行待機中"
+          }
+        }
+      }
+  }
+  res = requests.patch(url=url, headers=headers, json=data)
+  if res.status_code != 200:
+    error_message = "Template Box から テンプレートのデータを取得する際にエラーが発生しました。"
+    update_notion_status_to_error(template_id=template_id, error_message=error_message, headers=headers)
+
+def update_notion_status_to_inprogress(template_id: str, headers: dict):
+  url = f"https://api.notion.com/v1/pages/{template_id}"
+  data = {
+    "properties":
+      {
+        "Status": {
+          "status": {
+            "name": "実行中"
+          }
+        }
+      }
+  }
+  res = requests.patch(url=url, headers=headers, json=data)
+  if res.status_code != 200:
+    error_message = "Template Box から テンプレートのデータを取得する際にエラーが発生しました。"
+    update_notion_status_to_error(template_id=template_id, error_message=error_message, headers=headers)
