@@ -2,6 +2,7 @@ import requests
 import json
 import re
 from spreadsheet_to_page_in_db.parse import inline_text_to_rich_text, parse_blocks
+from spreadsheet_to_page_in_db.notion_api import update_notion_status_to_error
 
 
 # Block変数があるか否かを判定する関数。（TODO: rich_text の場合にのみ対応。ここでは text が BLOCK_NUM だけが入った rich_text か他の rich_text だと仮定する。）
@@ -279,37 +280,68 @@ def make_page_property(property_name, property_type, property_content, PROPERTY_
   else :
     raise ValueError(f"{property_name} の property type: {property_type} は処理できません。")
 
-# 全てのページを削除する関数 (order に重複がないと仮定する。)
-def delete_pages(output_database_id, headers, filtered_order) :
+# 全てのページを削除する関数 (order に重複がないと仮定する。)（エラーが発生しても基本続行してそのページは除くようにする。）
+def delete_pages(output_database_id, headers, filtered_order):
   delete_id_order_dict = {}
+  failed_orders = []  # 削除に失敗した order を格納
+
   for order in filtered_order:
-    # filterの作成
-    query_filter = {
-      "filter": {
-        "property": "order",
-        "number": {
-          "equals": order
+    try:
+      # filterの作成
+      query_filter = {
+        "filter": {
+          "property": "order",
+          "number": {
+            "equals": order
+          }
         }
       }
-    }
-    # filter を通した DB への query
-    url = f"https://api.notion.com/v1/databases/{output_database_id}/query"
-    res = requests.post(url=url, headers=headers, json=query_filter)
-    if res.status_code != 200:
-      print("古いページの削除時（厳密には archive ）に filter をかけた post request でエラーが発生しました。")
-      res.raise_for_status()
-    data_list = res.json()["results"]
-    if data_list:
+      
+      # filter を通した DB への query
+      url = f"https://api.notion.com/v1/databases/{output_database_id}/query"
+      res = requests.post(url=url, headers=headers, json=query_filter)
+      
+      try:
+        res.raise_for_status()  # HTTPエラーをキャッチ
+      except requests.exceptions.HTTPError as e:
+        print(f"ページ削除時のフィルタリングでエラー発生（order: {order}）: {e}")
+        failed_orders.append(order)  # 失敗した order を記録
+        continue  # エラーが発生した場合はこの order をスキップ
+
+      data_list = res.json().get("results", [])
+
+      if not data_list:
+        continue  # ページが見つからない場合はスキップ
+
       data = data_list[0]
       page_id = data["id"]
       url = f"https://api.notion.com/v1/pages/{page_id}"
       payload = {"archived": True}
+
       res = requests.patch(url=url, headers=headers, data=json.dumps(payload))
-      if res.status_code != 200:
-        print(f"ページを削除するとき（厳密には archive ）にエラーが発生しました。（ {order}個目のページ）")
-        res.raise_for_status()
+      
+      try:
+        res.raise_for_status()  # HTTPエラーをキャッチ
+      except requests.exceptions.HTTPError as e:
+        print(f"ページのアーカイブ（order: {order}）でエラー発生: {e}")
+        update_notion_status_to_error(template_id=page_id, error_message="", headers=headers, is_stopped=False)
+        failed_orders.append(order)  # 失敗した order を記録
+        continue  # エラー発生時はこの order をスキップ
+
+      # 削除成功したページのみ追加
       delete_id_order_dict[order] = page_id
-  return delete_id_order_dict
+
+    except requests.RequestException as e:
+      print(f"Notion API のリクエスト時にエラー発生（order: {order}）: {e}")
+      failed_orders.append(order)  # 失敗した order を記録
+      continue  # APIリクエストエラーが発生しても次の order へ
+
+    except Exception as e:
+      print(f"delete_pages 関数内で予期せぬエラー発生（order: {order}）: {e}")
+      failed_orders.append(order)  # 失敗した order を記録
+      continue  # その他のエラー発生時も処理を継続
+
+  return delete_id_order_dict, failed_orders
 
 if __name__ == "__main__":
   pass

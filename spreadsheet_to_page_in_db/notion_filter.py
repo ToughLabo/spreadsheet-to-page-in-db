@@ -241,14 +241,22 @@ def translate_to_query(expression: str, property_name: str, property_type) -> st
 # FILTERS_BOX（中間形） -> Notion DB Query Filter Object (filters_box は 辞書のリスト, 中身の辞書は, type, name, expression)
 def create_notion_filter(filters_box):
   parsed_filters = []
+  error_flag = False  # エラー発生フラグ
+
   for f in filters_box:
     if f["target"] == "Property":
       expression = f["expression"]
       property_name = f["name"]
       property_type = f["type"]
-      parsed_filter = translate_to_query(expression=expression,  property_name=property_name, property_type=property_type)
-      parsed_filters.append(parsed_filter)
-  return {"or": parsed_filters}
+
+      try:
+        parsed_filter = translate_to_query(expression=expression, property_name=property_name, property_type=property_type)
+        parsed_filters.append(parsed_filter)
+      except Exception as e:
+        print(f"translate_to_query でエラー発生: {e} (property_name: {property_name}, expression: {expression})")
+        error_flag = True  # エラーを記録
+
+  return {"or": parsed_filters}, error_flag
 
 # --- テスト用 ---
 if __name__ == "__main__":

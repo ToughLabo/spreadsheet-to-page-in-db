@@ -16,7 +16,8 @@ def extract_uuid_from_notion_url(url):
     elif len(result) == 32:  # すでにハイフンなしUUIDの場合
       return result
     else:
-      raise ValueError("不正な UUID です。")
+      print("不正な UUID です。")
+      return None
   else:
     print("Not found id from url!")
     return None
@@ -266,66 +267,106 @@ def batch_process_dataframe(
 
 # csv file の前処理
 def pre_process_csv(database_id, headers, df, pre_process_message):
-  # まずは database から内容を取得
-  url = f"https://api.notion.com/v1/databases/{database_id}/query"
-  payload = {}
-  res = requests.post(url=url, headers=headers, json=payload)
-  if res.status_code != 200:
-    print("cover & icon データベースから環境変数を取得する際にエラーが発生しました。")
-    res.raise_for_status()
-  variable_pairs = res.json()["results"]
-  column_list = []
-  for variable_pair in variable_pairs:
-    column_name = variable_pair["properties"]["Column"]["title"][0]["text"]["content"]
-    method = variable_pair["properties"]["Type"]["select"]["name"]
-    ai_flag = variable_pair["properties"]["AI"]["checkbox"]
-    column_list.append(column_name)
+  try:
+    # まずは database から内容を取得
+    url = f"https://api.notion.com/v1/databases/{database_id}/query"
+    payload = {}
+    res = requests.post(url=url, headers=headers, json=payload)
+    if res.status_code != 200:
+      print("cover & icon データベースから環境変数を取得する際にエラーが発生しました。")
+      res.raise_for_status()
     
-    # int 型
-    if method == "int":
-      df[column_name] = pd.to_numeric(df[column_name], errors='coerce').fillna(0).astype(int)
-      continue
+    variable_pairs = res.json().get("results", [])
+    column_list = []
     
-    # float 型
-    if method == "float":
-      df[column_name] = pd.to_numeric(df[column_name], errors='coerce').fillna(0).astype(float)
-      continue
-    
-    # callout 型
-    if method == "callout":
-      df[column_name] = df[column_name].apply(pre_process_callout)
-      if ai_flag:
-        df[column_name] = pre_process_generative_ai_batched(df[column_name])
-      continue
-    
-    if method == "quote":
-      df[column_name] = df[column_name].apply(pre_process_quote)
-      if ai_flag:
-        df[column_name] = pre_process_generative_ai_batched(df[column_name])
-      continue
-    
-    if method == "numbered_list":
-      df[column_name] = df[column_name].apply(pre_process_numbered_list)
-      if ai_flag:
-        df[column_name] = pre_process_generative_ai_batched(df[column_name])
-      continue
-    
-    if method == "bulleted_list":
-      df[column_name] = df[column_name].apply(pre_process_bulleted_list)
-      if ai_flag:
-        df[column_name] = pre_process_generative_ai_batched(df[column_name])
-      continue
-    
-    if ai_flag:
-      df[column_name] = pre_process_generative_ai_batched(df[column_name])
-      continue
-  
-  if pre_process_message == "全体":
-    for column_name in df.columns.to_list():
-      if not column_name in column_list:
-        df[column_name] = pre_process_generative_ai_batched(df[column_name])
-  
-  return df
+    for variable_pair in variable_pairs:
+      try:
+        column_name = variable_pair["properties"]["Column"]["title"][0]["text"]["content"]
+        method = variable_pair["properties"]["Type"]["select"]["name"]
+        ai_flag = variable_pair["properties"]["AI"]["checkbox"]
+        column_list.append(column_name)
+
+        # int 型
+        if method == "int":
+          try:
+            df[column_name] = pd.to_numeric(df[column_name], errors='coerce').fillna(0).astype(int)
+          except Exception as e:
+            print(f"カラム '{column_name}' の int 変換中にエラー発生: {e}")
+          continue
+
+        # float 型
+        if method == "float":
+          try:
+            df[column_name] = pd.to_numeric(df[column_name], errors='coerce').fillna(0).astype(float)
+          except Exception as e:
+            print(f"カラム '{column_name}' の float 変換中にエラー発生: {e}")
+          continue
+
+        # callout 型
+        if method == "callout":
+          try:
+            df[column_name] = df[column_name].apply(pre_process_callout)
+            if ai_flag:
+              df[column_name] = pre_process_generative_ai_batched(df[column_name])
+          except Exception as e:
+            print(f"カラム '{column_name}' の callout 処理中にエラー発生: {e}")
+          continue
+
+        # quote 型
+        if method == "quote":
+          try:
+            df[column_name] = df[column_name].apply(pre_process_quote)
+            if ai_flag:
+              df[column_name] = pre_process_generative_ai_batched(df[column_name])
+          except Exception as e:
+            print(f"カラム '{column_name}' の quote 処理中にエラー発生: {e}")
+          continue
+
+        # numbered_list 型
+        if method == "numbered_list":
+          try:
+            df[column_name] = df[column_name].apply(pre_process_numbered_list)
+            if ai_flag:
+              df[column_name] = pre_process_generative_ai_batched(df[column_name])
+          except Exception as e:
+            print(f"カラム '{column_name}' の numbered_list 処理中にエラー発生: {e}")
+          continue
+
+        # bulleted_list 型
+        if method == "bulleted_list":
+          try:
+            df[column_name] = df[column_name].apply(pre_process_bulleted_list)
+            if ai_flag:
+              df[column_name] = pre_process_generative_ai_batched(df[column_name])
+          except Exception as e:
+            print(f"カラム '{column_name}' の bulleted_list 処理中にエラー発生: {e}")
+          continue
+
+        # AI処理のみ
+        if ai_flag:
+          try:
+            df[column_name] = pre_process_generative_ai_batched(df[column_name])
+          except Exception as e:
+            print(f"カラム '{column_name}' の AI 処理中にエラー発生: {e}")
+          continue
+
+      except Exception as e:
+        print(f"カラム '{column_name}' の処理中に予期せぬエラーが発生: {e}")
+
+    # 全体処理
+    if pre_process_message == "全体":
+      for column_name in df.columns.to_list():
+        if column_name not in column_list:
+          try:
+            df[column_name] = pre_process_generative_ai_batched(df[column_name])
+          except Exception as e:
+            print(f"カラム '{column_name}' の全体 AI 処理中にエラー発生: {e}")
+
+    return df
+
+  except Exception as e:
+    print(f"pre_process_csv 関数内で致命的なエラーが発生: {e}")
+    return None  # 失敗時は None を返す
 
 if __name__ == "__main__":
   data = {

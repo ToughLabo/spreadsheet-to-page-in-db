@@ -87,7 +87,7 @@ def fetch_all_pages(headers, url, payload):
   
   return all_pages
 
-def update_notion_status_to_error(template_id: str, error_message: str, headers: dict):
+def update_notion_status_to_error(template_id: str, error_message: str, headers: dict, is_stopped = False):
   """
   NotionのページのStatusプロパティを「エラー」に更新する関数
 
@@ -114,9 +114,10 @@ def update_notion_status_to_error(template_id: str, error_message: str, headers:
     res.raise_for_status()
   else:
     print({error_message})
-    res.raise_for_status()
+    if is_stopped:
+      res.raise_for_status()
 
-def update_notion_status_to_ready(template_id: str, headers: dict):
+def update_notion_status_to_ready(template_id: str, headers: dict, is_stopped=False):
   url = f"https://api.notion.com/v1/pages/{template_id}"
   data = {
     "properties":
@@ -131,9 +132,9 @@ def update_notion_status_to_ready(template_id: str, headers: dict):
   res = requests.patch(url=url, headers=headers, json=data)
   if res.status_code != 200:
     error_message = "Template Box から テンプレートのデータを取得する際にエラーが発生しました。"
-    update_notion_status_to_error(template_id=template_id, error_message=error_message, headers=headers)
+    update_notion_status_to_error(template_id=template_id, error_message=error_message, headers=headers, is_stopped=is_stopped)
 
-def update_notion_status_to_inprogress(template_id: str, headers: dict):
+def update_notion_status_to_inprogress(template_id: str, headers: dict, is_stopped=False):
   url = f"https://api.notion.com/v1/pages/{template_id}"
   data = {
     "properties":
@@ -148,4 +149,4 @@ def update_notion_status_to_inprogress(template_id: str, headers: dict):
   res = requests.patch(url=url, headers=headers, json=data)
   if res.status_code != 200:
     error_message = "Template Box から テンプレートのデータを取得する際にエラーが発生しました。"
-    update_notion_status_to_error(template_id=template_id, error_message=error_message, headers=headers)
+    update_notion_status_to_error(template_id=template_id, error_message=error_message, headers=headers, is_stopped=is_stopped)
