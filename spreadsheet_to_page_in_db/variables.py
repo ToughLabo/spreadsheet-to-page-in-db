@@ -164,7 +164,7 @@ def create_property_and_column(template_database_id, headers, PROPERTY_NAME_TYPE
           is_order_flag = True
 
         # property の type を取得する
-        property_type = PROPERTY_NAME_TYPE_BOX.get(property_name, "unknown")
+        property_type = PROPERTY_NAME_TYPE_BOX.get(property_name)
         property_and_column_list.append({
           "column_name": column_name,
           "property_name": property_name,
@@ -230,14 +230,14 @@ def create_property_or_column_filter(template_database_id, output_database_id, h
           filters_box.append({
             "target": filter_target,
             "name": filter_name,
-            "type": COLUMN_NAME_TYPE_BOX.get(filter_name, "unknown"),
+            "type": COLUMN_NAME_TYPE_BOX.get(filter_name),
             "expression": filter_expression
           })
         else:
           filters_box.append({
             "target": filter_target,
             "name": filter_name,
-            "type": PROPERTY_NAME_TYPE_BOX.get(filter_name, "unknown"),
+            "type": PROPERTY_NAME_TYPE_BOX.get(filter_name),
             "expression": filter_expression
           })
 

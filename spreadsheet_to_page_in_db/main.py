@@ -381,7 +381,6 @@ def main():
       error_message = f"実行中から完了に変更する際にエラーが発生しました。({index+1}番目) "
       update_notion_status_to_error(template_id=template_page_id, error_message=error_message, headers=headers)
       continue
-    exit()
 
 if __name__ == "__main__":
   main()
