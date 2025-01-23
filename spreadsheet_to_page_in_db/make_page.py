@@ -281,11 +281,13 @@ def make_page_property(property_name, property_type, property_content, PROPERTY_
     raise ValueError(f"{property_name} の property type: {property_type} は処理できません。")
 
 # 全てのページを削除する関数 (order に重複がないと仮定する。)（エラーが発生しても基本続行してそのページは除くようにする。）
-def delete_pages(output_database_id, headers, filtered_order):
+def delete_pages(output_database_id, headers, filtered_order, index):
   delete_id_order_dict = {}
   failed_orders = []  # 削除に失敗した order を格納
 
   for order in filtered_order:
+    if order <= index:
+      continue
     try:
       # filterの作成
       query_filter = {

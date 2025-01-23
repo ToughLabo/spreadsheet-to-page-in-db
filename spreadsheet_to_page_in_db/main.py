@@ -277,7 +277,7 @@ def main():
     
     # Page の作成
     # まず、古いページを Filter に応じて削除する
-    FILTERS_BOX["notion"], failed_orders_list = delete_pages(output_database_id=output_database_id, headers=headers, filtered_order=FILTERS_BOX["common"])
+    FILTERS_BOX["notion"], failed_orders_list = delete_pages(output_database_id=output_database_id, headers=headers, filtered_order=FILTERS_BOX["common"], index = template_page_index)
     # 各ページの作成
     # TODO: ページの作成に失敗した場合には削除したページを復活させたのち、そこにエラーを記録して次のページの処理に移るように修正する。
     for row in track(zip(*[df[col] for col in df.columns]), description=f"Creating Pages Now for Template (Name: {template_page_name})", total=len(df)):
