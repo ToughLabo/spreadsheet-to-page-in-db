@@ -201,7 +201,7 @@ def batch_process_dataframe(
 
   # 行数から何バッチ必要か計算
   total_rows = len(df)
-  num_batches = math.ceil((total_rows-1) / batch_size)
+  num_batches = math.ceil((total_rows) / batch_size)
   # 列番号を取得
   column_num = df.columns.get_loc(text_column)
 
