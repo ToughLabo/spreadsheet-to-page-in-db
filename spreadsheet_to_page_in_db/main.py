@@ -169,7 +169,7 @@ def main():
     url = f"https://api.notion.com/v1/databases/{output_database_id}"
     res = requests.get(url=url, headers=headers)
     if res.status_code != 200:
-      error_message = "output database properties を取得する際にエラーが発生しました。"
+      error_message = "output database properties を取得する際にエラーが発生しました。"+ "Error message: "+res.text
       update_notion_status_to_error(template_id=template_page_id, error_message=error_message, headers=headers)
       continue
     properties = res.json()["properties"]
@@ -230,12 +230,12 @@ def main():
           elif template_block["child_database"]["title"] == "Filters":
             filters_id = template_block["id"]
             result, notion_delete_page_dict, error_flag = create_property_or_column_filter(template_database_id=filters_id, output_database_id=output_database_id, headers=headers, df=df, PROPERTY_NAME_TYPE_BOX=PROPERTY_NAME_TYPE_BOX, COLUMN_NAME_TYPE_BOX=COLUMN_NAME_TYPE_BOX)
-            FILTERS_BOX= result[0]; filter_column_name_list = result[1];
             if error_flag:
               error_message = "filteres dictionary の作成に失敗しました。"
               update_notion_status_to_error(template_id=template_page_id, error_message=error_message, headers=headers)
               is_continue = True
               break
+            FILTERS_BOX= result[0]; filter_column_name_list = result[1];
             
           # その他
           else:

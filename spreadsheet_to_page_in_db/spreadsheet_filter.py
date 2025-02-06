@@ -12,8 +12,8 @@ def parse_value(token: str):
   # ダブルクォートで始まり終わる場合 → 中身を文字列として返す
   # 例:  "abc"  ->  abc
   if len(token) >= 2 and (token[0] == '"' or token[0] == '“') and (token[-1] == '"' or token[-1] == '”'):
-    print("文字列")
-    print(f"token:{token}")
+    if token[0] == '“' or token[-1] == '”':
+      token = '"' + token[1:len(token)-1] + '"' 
     return token  
   
   # ダブルクォートがなければ数値として扱う
@@ -96,7 +96,7 @@ def parse_like(column: str, m) -> str:
 # Notion -> df.query
 def translate_to_query(expression: str, column: str) -> str:
   # 両サイドの空白を削除
-  expression.strip()
+  expression = expression.strip()
   # 'not in [xx, yy]' → '~col.isin([xx, yy])'
   #   という形に直すための置換。([^\]]+) は ']' でない文字の繰り返し
   pattern_not_in = rf'^not\s+in\s*\[\s*([^\]]+)\s*\]$'
@@ -123,7 +123,7 @@ def translate_to_query(expression: str, column: str) -> str:
     return parse_not_equal(column=column, m=match_not_equal)
   
   # 'equal xx'
-  pattern_equal = rf'=\s*\.+'
+  pattern_equal = rf'=\s*(.+)'
   match_equal = re.match(pattern_equal, expression)
   if match_equal:
     return parse_equal(column=column, m=match_equal)
@@ -160,12 +160,13 @@ def create_spreadsheet_filter(df_original, filters_box):
 # --- 使い方例 ---
 if __name__ == "__main__":
   df = pd.DataFrame({
-    'col': [10, 20, 30, 40, 50],
-    'name': ['A', 'B', 'C', 'D', 'E']
+    'col': [10, 20, 30, 40, 50, 60],
+    "col_str": ["a", "b", "c", "d", "4", "弥生時代"],
+    'name': ['A', 'B', 'C', 'D', 'E', '弥生時代']
   })
 
-  dsl_condition = '10 or 20'  # 例: col が 10 or 20 の行を取りたい
-  query_expr = translate_to_query(dsl_condition, column='col')
+  dsl_condition = '= “弥生時代”'  # 例: col が 10 or 20 の行を取りたい
+  query_expr = translate_to_query(dsl_condition, column='col_str')
   print('query_expr:', query_expr)
   # -> query_expr: (col == 10) | (col == 20)
 

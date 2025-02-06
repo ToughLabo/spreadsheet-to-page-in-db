@@ -209,7 +209,7 @@ def create_property_or_column_filter(template_database_id, output_database_id, h
       res.raise_for_status()  # HTTPエラーをキャッチ
     except requests.exceptions.HTTPError as e:
       print(f"Notion API からのレスポンスエラー (template database): {e}")
-      return None, True  # HTTPエラーが発生した場合は None, True を返す
+      return None, None, True  # HTTPエラーが発生した場合は None, True を返す
 
     # データ取得
     filter_combs = res.json().get("results", [])
@@ -253,7 +253,7 @@ def create_property_or_column_filter(template_database_id, output_database_id, h
       res.raise_for_status()
     except requests.exceptions.HTTPError as e:
       print(f"Notion API からのレスポンスエラー (output database): {e}")
-      return None, True
+      return None, None, True
 
     output_db_data_length = len(res.json().get("results", []))
     spreadsheet_data_length = len(df)
@@ -263,7 +263,7 @@ def create_property_or_column_filter(template_database_id, output_database_id, h
       output_notion_filter, error_flag = create_notion_filter(filters_box=filters_box)
     except Exception as e:
       print(f"Notion 用フィルターの作成に失敗: {e}")
-      return None, True
+      return None, None, True
 
     output_notion_sorts = [{"property": "order", "direction": "ascending"}]
     payload = {"filter": output_notion_filter, "sorts": output_notion_sorts}
@@ -277,8 +277,8 @@ def create_property_or_column_filter(template_database_id, output_database_id, h
       res.raise_for_status()
     except requests.exceptions.HTTPError as e:
       print(f"Notion API からのフィルターデータ取得エラー: {e}")
-      return None, True
-
+      return None, None, True
+    
     filtered_items = res.json().get("results", [])
     for item in filtered_items:
       try:
@@ -295,7 +295,7 @@ def create_property_or_column_filter(template_database_id, output_database_id, h
       filtered_df = create_spreadsheet_filter(df_original=df, filters_box=filters_box)
     except Exception as e:
       print(f"スプレッドシート用フィルターの作成に失敗: {e}")
-      return None, True
+      return None, None, True
 
     spreadsheet_filtered_order_list = filtered_df["order"].tolist()
 
@@ -316,8 +316,8 @@ def create_property_or_column_filter(template_database_id, output_database_id, h
 
   except requests.RequestException as e:
     print(f"Notion API へのリクエスト中にエラー発生: {e}")
-    return None, True
+    return None, None, True
 
   except Exception as e:
     print(f"create_property_or_column_filter 関数内で予期せぬエラーが発生: {e}")
-    return None, True
+    return None, None, True

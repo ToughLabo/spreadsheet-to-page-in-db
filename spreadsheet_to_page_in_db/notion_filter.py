@@ -187,7 +187,7 @@ def parse_like(property_name, property_type, m) -> str:
 # Notion -> Notion database query filter
 def translate_to_query(expression: str, property_name: str, property_type) -> str:
   # 両サイドの空白を削除
-  expression.strip()
+  expression = expression.strip()
   # 'not in [xx, yy]' → '~col.isin([xx, yy])'
   #   という形に直すための置換。([^\]]+) は ']' でない文字の繰り返し
   pattern_not_in = rf'^not\s+in\s*\[\s*([^\]]+)\s*\]$'
@@ -215,7 +215,9 @@ def translate_to_query(expression: str, property_name: str, property_type) -> st
   
   # 'equal xx'
   pattern_equal = rf'=\s*(.+)'
+  
   match_equal = re.match(pattern_equal, expression)
+  
   
   if match_equal:
     return parse_equal(property_name, property_type, m=match_equal)
