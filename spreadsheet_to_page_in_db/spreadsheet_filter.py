@@ -8,12 +8,10 @@ def parse_value(token: str):
   囲まれていなければ数値 (int/float) としてパースを試みる。
   """
   token = token.strip()
-  
   # ダブルクォートで始まり終わる場合 → 中身を文字列として返す
   # 例:  "abc"  ->  abc
-  if len(token) >= 2 and (token[0] == '"' or token[0] == '“') and (token[-1] == '"' or token[-1] == '”'):
-    if token[0] == '“' or token[-1] == '”':
-      token = '"' + token[1:len(token)-1] + '"' 
+  if len(token) >= 2 and (token[0] == '"' or token[0] == '“' or token[0] == '”') and (token[-1] == '"' or token[-1] == '”' or [-1] == '“'):
+    token = '"' + token[1:len(token)-1] + '"'
     return token  
   
   # ダブルクォートがなければ数値として扱う

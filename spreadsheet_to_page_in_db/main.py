@@ -229,12 +229,14 @@ def main():
           # Filters
           elif template_block["child_database"]["title"] == "Filters":
             filters_id = template_block["id"]
+            print("COLUMN_NAME_TYPE_BOX", COLUMN_NAME_TYPE_BOX)
             result, notion_delete_page_dict, error_flag = create_property_or_column_filter(template_database_id=filters_id, output_database_id=output_database_id, headers=headers, df=df, PROPERTY_NAME_TYPE_BOX=PROPERTY_NAME_TYPE_BOX, COLUMN_NAME_TYPE_BOX=COLUMN_NAME_TYPE_BOX)
             if error_flag:
               error_message = "filteres dictionary の作成に失敗しました。"
               update_notion_status_to_error(template_id=template_page_id, error_message=error_message, headers=headers)
               is_continue = True
               break
+            print("result:", result)
             FILTERS_BOX= result[0]; filter_column_name_list = result[1];
             
           # その他

@@ -137,16 +137,27 @@ def make_heading_block(headers, heading_block, df_row, BLOCK_VAR_BOX):
       else:
         complete_children.extend(complete_child)
   # ブロックの作成
-  complete_block = {
-    "object": "block",
-    "type": heading_type,
-    heading_type: {
-      "rich_text": rich_text,
-      "color": color,
-      "is_toggleable": is_toggleable,
-      "children": complete_children
+  if is_toggleable:
+    complete_block = {
+      "object": "block",
+      "type": heading_type,
+      heading_type: {
+        "rich_text": rich_text,
+        "color": color,
+        "is_toggleable": is_toggleable,
+        "children": complete_children,
+      }
     }
-  }
+  else:
+    complete_block = {
+      "object": "block",
+      "type": heading_type,
+      heading_type: {
+        "rich_text": rich_text,
+        "color": color,
+        "is_toggleable": is_toggleable
+      }
+    }
   return complete_block
 
 # paragraph （TODO: 今の所は paragraph の children には対応しない。（テンプレートとしてやる意味が分からん））

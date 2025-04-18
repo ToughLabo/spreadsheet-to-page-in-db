@@ -1,5 +1,6 @@
 import requests
 import json
+import time
 
 # DB に新しいページを作成する。
 def create_new_page_in_db(headers, database_id, icon, cover, properties, children, order, delete_order_index):
@@ -12,7 +13,9 @@ def create_new_page_in_db(headers, database_id, icon, cover, properties, childre
     "properties": properties,
     "children": children
   }
+  print("payload:",payload)
   res = requests.post(url=url, headers=headers, json=payload)
+  print("res:", res)
   if res.status_code != 200:
     if order:
       print(f"ページを作成する際にエラーが発生しました。order = {order}")

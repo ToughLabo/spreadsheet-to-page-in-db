@@ -312,7 +312,7 @@ def create_property_or_column_filter(template_database_id, output_database_id, h
     common_filtered_order_list.sort()
     spreadsheet_filtered_order_list.sort()
 
-    return [{"common": common_filtered_order_list, "notion": output_db_filtered_order_list, "spreadsheet": spreadsheet_filtered_order_list}, filter_column_name_list], output_db_filtered_order_dict, error_flag
+    return [{"common": spreadsheet_filtered_order_list, "notion": output_db_filtered_order_list, "spreadsheet": spreadsheet_filtered_order_list}, filter_column_name_list], output_db_filtered_order_dict, error_flag
 
   except requests.RequestException as e:
     print(f"Notion API へのリクエスト中にエラー発生: {e}")
