@@ -349,7 +349,7 @@ def main():
         is_continue = False
         continue
       # 作成したページの追加
-      INDEX = create_new_page_in_db(headers=headers, database_id=output_database_id, cover=cover, icon=icon, properties=properties, children=children, order=order, delete_order_index=FILTERS_BOX["notion"])
+      INDEX = create_new_page_in_db(headers=headers, database_id=output_database_id, cover=cover, icon=icon, properties=properties, children=children, order=order, delete_order_index=FILTERS_BOX["notion"], template_page_id = template_page_id)
       # Last INDEX を更新
       url = f"https://api.notion.com/v1/pages/{template_page_id}"
       data = {

@@ -271,10 +271,10 @@ def create_property_or_column_filter(template_database_id, output_database_id, h
     # output db で filter をかけてデータを取得する
     output_db_filtered_order_list = []
     output_db_filtered_order_dict = {}
-    res = requests.post(url=url, headers=headers, json=payload)
+    print("payload:", payload)
 
     try:
-      res.raise_for_status()
+      res = requests.post(url=url, headers=headers, json=payload)
     except requests.exceptions.HTTPError as e:
       print(f"Notion API からのフィルターデータ取得エラー: {e}")
       return None, None, True

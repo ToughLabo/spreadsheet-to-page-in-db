@@ -3,7 +3,7 @@ import json
 import time
 
 # DB に新しいページを作成する。
-def create_new_page_in_db(headers, database_id, icon, cover, properties, children, order, delete_order_index):
+def create_new_page_in_db(headers, database_id, icon, cover, properties, children, order, delete_order_index, template_page_id):
   url = "https://api.notion.com/v1/pages"
   parent = {"database_id": database_id}
   payload = {
@@ -13,12 +13,11 @@ def create_new_page_in_db(headers, database_id, icon, cover, properties, childre
     "properties": properties,
     "children": children
   }
-  print("payload:",payload)
   res = requests.post(url=url, headers=headers, json=payload)
-  print("res:", res)
   if res.status_code != 200:
     if order:
       print(f"ページを作成する際にエラーが発生しました。order = {order}")
+      print(res.status_code, res.text);
     else:
       print(f"ページを作成する際にエラーが発生しました。")
     # 元のページを復活させてエラーを吐く
@@ -40,8 +39,8 @@ def create_new_page_in_db(headers, database_id, icon, cover, properties, childre
       if res.status_code != 200:
         print(order)
         print("元のページを復活させてエラーを吐かせる時にエラーが発生しました。")
-        res.raise_for_status()
-    res.raise_for_status()
+        update_notion_status_to_error(template_id=template_page_id, error_message='NotionのPage作成時にエラーが発生しました。', headers=headers)
+    update_notion_status_to_error(template_id=template_page_id, error_message='NotionのPage作成時にエラーが発生しました。', headers=headers)
   return order
 
 # 既存のページに追加する。

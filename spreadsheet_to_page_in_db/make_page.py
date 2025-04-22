@@ -312,10 +312,10 @@ def delete_pages(output_database_id, headers, filtered_order, index):
       
       # filter を通した DB への query
       url = f"https://api.notion.com/v1/databases/{output_database_id}/query"
-      res = requests.post(url=url, headers=headers, json=query_filter)
+      
       
       try:
-        res.raise_for_status()  # HTTPエラーをキャッチ
+        res = requests.post(url=url, headers=headers, json=query_filter)
       except requests.exceptions.HTTPError as e:
         print(f"ページ削除時のフィルタリングでエラー発生（order: {order}）: {e}")
         failed_orders.append(order)  # 失敗した order を記録
@@ -331,10 +331,10 @@ def delete_pages(output_database_id, headers, filtered_order, index):
       url = f"https://api.notion.com/v1/pages/{page_id}"
       payload = {"archived": True}
 
-      res = requests.patch(url=url, headers=headers, data=json.dumps(payload))
+      
       
       try:
-        res.raise_for_status()  # HTTPエラーをキャッチ
+        res = requests.patch(url=url, headers=headers, data=json.dumps(payload))
       except requests.exceptions.HTTPError as e:
         print(f"ページのアーカイブ（order: {order}）でエラー発生: {e}")
         update_notion_status_to_error(template_id=page_id, error_message="", headers=headers, is_stopped=False)

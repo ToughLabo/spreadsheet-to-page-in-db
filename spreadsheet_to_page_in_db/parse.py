@@ -236,7 +236,7 @@ def parse_numbered_list(tokens, index, is_bold=False, is_italic=False, is_underl
   blocks = []
   while index < len(tokens) and tokens[index].type != "ordered_list_close":
     if tokens[index].type == "list_item_open":
-      item_blocks, index = parse_list_item(tokens, index, "ordered_list_item", is_bold, is_italic, is_underline, is_strikethrough)
+      item_blocks, index = parse_list_item(tokens, index, "numbered_list_item", is_bold, is_italic, is_underline, is_strikethrough)
       blocks.extend(item_blocks)
     else:
       index += 1
