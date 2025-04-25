@@ -205,15 +205,23 @@ def parse_list_item(tokens, index, type_name, is_bold=False, is_italic=False, is
     blocks, index = parse_any_one_block(tokens, index, is_bold, is_italic, is_underline, is_strikethrough)
     if len(blocks) > 0:
       children.extend(blocks)
-
-  # block を作成 
-  block = {
-    "type": type_name,
-    type_name :{
-      "rich_text": inline_text_to_rich_text(list_text, is_bold, is_italic, is_underline, is_strikethrough),
-      "children": children
+  if len(children) > 0:
+    # block を作成 
+    block = {
+      "type": type_name,
+      type_name :{
+        "rich_text": inline_text_to_rich_text(list_text, is_bold, is_italic, is_underline, is_strikethrough),
+        "children": children
+      }
     }
-  }
+  else :
+    # block を作成 
+    block = {
+      "type": type_name,
+      type_name :{
+        "rich_text": inline_text_to_rich_text(list_text, is_bold, is_italic, is_underline, is_strikethrough)
+      }
+    }
   index += 1
   return [block], index
 

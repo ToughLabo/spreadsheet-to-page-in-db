@@ -286,7 +286,9 @@ def make_page_property(property_name, property_type, property_content, PROPERTY_
       raise ValueError(f"{property_name} の {property_content} は出力先のデータベースに登録されていません！")
   if property_type == "title":
     return {"type":"title", "title": inline_text_to_rich_text(property_content)}
-  if property_type in ["checkbox", "email", "number", "phone_number", "url"]:
+  if property_type == "checkbox":
+    return {property_type: True if property_content else False }
+  if property_type in ["email", "number", "phone_number", "url"]:
     return {property_type: property_content}
   else :
     raise ValueError(f"{property_name} の property type: {property_type} は処理できません。")

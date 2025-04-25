@@ -160,8 +160,20 @@ def main():
     df_type_dict = df.dtypes.to_dict()
     COLUMN_NAME_TYPE_BOX = {}
     for column_name, column_type in df_type_dict.items():
+      col = df[column_name]
       if np.issubdtype(column_type, np.number):
         COLUMN_NAME_TYPE_BOX[column_name] = "number"
+      # 明らかに boolean（dtype が bool の場合）
+      elif column_type == bool:
+        COLUMN_NAME_TYPE_BOX[column_name] = "boolean"
+
+      # "TRUE"/"FALSE" のような文字列で boolean を表している列
+      elif col.dropna().isin(["TRUE", "FALSE", "True", "False"]).all():
+        COLUMN_NAME_TYPE_BOX[column_name] = "boolean"
+
+      # 0/1 の int のみで構成されている列
+      elif np.issubdtype(column_type, np.integer) and set(col.dropna().unique()).issubset({0, 1}):
+        COLUMN_NAME_TYPE_BOX[column_name] = "boolean"
       else:
         COLUMN_NAME_TYPE_BOX[column_name] = "text"
     
@@ -271,7 +283,12 @@ def main():
     
     # フィルターをかけて csv から data を取得（あらかじめ csv は Markdown 形式に処理されていること、orderがつけられていることを仮定する。）
     # まず必要な列だけ抜き出す。
-    df = df[USE_COL_BOX]
+    try:
+      df = df[USE_COL_BOX]
+    except Exception as e:
+      error_message = f"使用できない列がスプレッドシート内にあります。登録した列名が存在するか再度確認してください。： {e}"
+      update_notion_status_to_error(template_id=template_page_id, error_message=error_message, headers=headers)
+      continue
     # 次に、order についてフィルターをかける ( common: spreadsheet を基準に spreadsheet と notion db の共通部分をとる。（spreadsheetの追加分までは削除しない) ）
     df_filter = FILTERS_BOX["common"]
     df = df.query("order in @df_filter")
@@ -320,7 +337,10 @@ def main():
           if page_id:
             update_notion_status_to_error(template_id=page_id, error_message=error_message, headers=headers)
           else:
-            print(f"Error!: error_message")
+            print(f"Error!: {error_message}")
+            print(f"Property Name: {property_name}")
+            print(f"Property Type: {property_type}")
+            print(f"Property Content: {property_content}")
           is_continue = True
           break
         properties[property_name] = parsed_property
@@ -334,11 +354,11 @@ def main():
         try:
           complete_block, is_blocks = make_complete_block_for_template(headers, template_block, df_row, BLOCK_VAR_BOX)
         except Exception as e:
-          error_message = f"ページの ブロック作成時にエラーが発生しました。"
+          error_message = f"ページの ブロック作成時にエラーが発生しました。{e}"
           if page_id:
             update_notion_status_to_error(template_id=template_page_id, error_message=error_message, headers=headers)
           else:
-            print(f"Error!: error_message")
+            print(f"Error!: {error_message}")
           is_continue = True
           break
         if not is_blocks:
