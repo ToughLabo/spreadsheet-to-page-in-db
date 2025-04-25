@@ -271,7 +271,6 @@ def create_property_or_column_filter(template_database_id, output_database_id, h
     # output db で filter をかけてデータを取得する
     output_db_filtered_order_list = []
     output_db_filtered_order_dict = {}
-    print("payload:", payload)
 
     try:
       res = requests.post(url=url, headers=headers, json=payload)
