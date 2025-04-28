@@ -161,7 +161,7 @@ def main():
     COLUMN_NAME_TYPE_BOX = {}
     for column_name, column_type in df_type_dict.items():
       col = df[column_name]
-      if np.issubdtype(column_type, np.number):
+      if np.issubdtype(column_type, np.number) or column_name == "order":
         COLUMN_NAME_TYPE_BOX[column_name] = "number"
       # 明らかに boolean（dtype が bool の場合）
       elif column_type == bool:
